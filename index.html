@@ -308,9 +308,14 @@ const BUILTIN = [
     { id: "kakao-native-sq", name: "디스플레이 (1:1)", w: 500, h: 500, kb: 500, fmt: "jpg" },
     { id: "kakao-native-vert", name: "디스플레이 (9:16)", w: 720, h: 1280, kb: 500, fmt: "jpg" },
     { id: "kakao-display-45", name: "디스플레이 (4:5)", w: 800, h: 1000, kb: 500, fmt: "jpg" },
+    { id: "kakao-display-logo", name: "디스플레이 로고 (1:1)", w: 300, h: 300, kb: 500, fmt: "jpg" },
+    { id: "kakao-channel", name: "카카오톡채널", w: 1200, h: 380, kb: 500, fmt: "jpg" },
+    { id: "kakao-adview", name: "애드뷰 (세로 360~7800 가변, 최소 높이)", w: 720, h: 360, kb: 400, fmt: "jpg" },
+    { id: "kakao-adview-promo", name: "애드뷰 홍보 이미지", w: 1280, h: 720, kb: 400, fmt: "jpg" },
+    { id: "kakao-coupon", name: "쿠폰 이미지", w: 720, h: 720, kb: 20480, fmt: "jpg" },
   ]},
   { media: "네이버 GFA", items: [
-    { id: "naver-smart", name: "스마트채널", w: 1250, h: 370, kb: 500, fmt: "png", cutout: true },
+    { id: "naver-smart", name: "스마트채널 (오브젝트)", w: 195, h: 130, kb: 150, fmt: "png", cutout: true },
     { id: "naver-branding", name: "브랜딩배너", w: 1250, h: 560, kb: 230, fmt: "jpg" },
     { id: "naver-da-sq", name: "DA 정방형", w: 1200, h: 1200, kb: 800, fmt: "jpg" },
     { id: "naver-da-native", name: "DA 네이티브", w: 342, h: 228, kb: 130, fmt: "jpg" },
@@ -319,6 +324,22 @@ const BUILTIN = [
     // 쇼핑프로모션: 공식 수치 미확인, GFA 네이티브 이미지 규격으로 둠
     { id: "naver-shop-sq", name: "쇼핑프로모션 (1:1)", w: 1200, h: 1200, kb: 800, fmt: "jpg" },
     { id: "naver-shop-wide", name: "쇼핑프로모션 (1.91:1)", w: 1200, h: 628, kb: 800, fmt: "jpg" },
+  ]},
+  { media: "크리테오", items: [
+    { id: "criteo-300x250", name: "이미지", w: 300, h: 250, kb: 499, fmt: "jpg" },
+    { id: "criteo-300x600", name: "이미지", w: 300, h: 600, kb: 499, fmt: "jpg" },
+    { id: "criteo-728x90", name: "이미지", w: 728, h: 90, kb: 499, fmt: "jpg" },
+    { id: "criteo-970x250", name: "이미지", w: 970, h: 250, kb: 499, fmt: "jpg" },
+  ]},
+  { media: "토스", items: [
+    { id: "toss-quiz", name: "퀴즈화면", w: 1500, h: 840, kb: 10240, fmt: "jpg" },
+  ]},
+  { media: "네이버 브랜드검색", items: [
+    { id: "nbs-pc-main", name: "PC Light Basic 메인", w: 556, h: 564, kb: 10240, fmt: "jpg" },
+    { id: "nbs-pc-thumb", name: "PC Light Basic 썸네일", w: 228, h: 152, kb: 10240, fmt: "jpg" },
+    { id: "nbs-m-main", name: "M Light Premium 메인", w: 1464, h: 548, kb: 2048, fmt: "jpg" },
+    { id: "nbs-m-thumb", name: "M Light Premium 썸네일", w: 214, h: 120, kb: 10240, fmt: "jpg" },
+    { id: "nbs-m-brand", name: "M Light Premium 브랜드추천", w: 256, h: 256, kb: 10240, fmt: "jpg" },
   ]},
   { media: "메타", items: [
     { id: "meta-feed-sq", name: "피드 (1:1)", w: 1080, h: 1080, kb: 30720, fmt: "jpg" },
@@ -338,9 +359,11 @@ const BUILTIN = [
     { id: "gdn-160x600", name: "와이드 스카이스크래퍼", w: 160, h: 600, kb: 150, fmt: "jpg" },
     { id: "gdn-320x50", name: "모바일 배너", w: 320, h: 50, kb: 150, fmt: "jpg" },
     { id: "gdn-320x100", name: "큰 모바일 배너", w: 320, h: 100, kb: 150, fmt: "jpg" },
-    { id: "gdn-resp-wide", name: "반응형 가로 (1.91:1)", w: 1200, h: 628, kb: 5120, fmt: "jpg" },
-    { id: "gdn-resp-sq", name: "반응형 정사각 (1:1)", w: 1200, h: 1200, kb: 5120, fmt: "jpg" },
-    { id: "gdn-resp-45", name: "반응형 세로 (4:5)", w: 960, h: 1200, kb: 5120, fmt: "jpg" },
+    { id: "gdn-resp-wide", name: "GDN·PMax 가로 (1.91:1)", w: 1200, h: 628, kb: 5120, fmt: "jpg" },
+    { id: "gdn-resp-sq", name: "GDN·PMax 정사각 (1:1)", w: 1200, h: 1200, kb: 5120, fmt: "jpg" },
+    { id: "gdn-resp-45", name: "GDN·PMax 세로 (4:5)", w: 960, h: 1200, kb: 5120, fmt: "jpg" },
+    { id: "gdc-sq", name: "GDC 정사각 (1:1)", w: 1200, h: 1200, kb: 5120, fmt: "jpg" },
+    { id: "gdc-wide", name: "GDC 가로 (1.91:1)", w: 1200, h: 628, kb: 5120, fmt: "jpg" },
   ]},
   // 스마덱스: Creative Specs 2026 기준
   { media: "스마덱스", items: [
@@ -362,14 +385,15 @@ const BUILTIN = [
     { id: "appier-320x480", name: "전면 세로", w: 320, h: 480, kb: 500, fmt: "jpg" },
     { id: "appier-728x90", name: "리더보드", w: 728, h: 90, kb: 500, fmt: "jpg" },
   ]},
+  // 인모비: 80KB 이상 · 96 DPI 이상 · 24비트 이상 (상한 없음 → 10MB로 둠)
   { media: "인모비", items: [
-    { id: "inmobi-640x100", name: "배너", w: 640, h: 100, kb: 500, fmt: "jpg" },
-    { id: "inmobi-600x100", name: "배너", w: 600, h: 100, kb: 500, fmt: "jpg" },
-    { id: "inmobi-600x500", name: "직사각형", w: 600, h: 500, kb: 500, fmt: "jpg" },
-    { id: "inmobi-640x960", name: "전면 세로", w: 640, h: 960, kb: 500, fmt: "jpg" },
-    { id: "inmobi-960x640", name: "전면 가로", w: 960, h: 640, kb: 500, fmt: "jpg" },
-    { id: "inmobi-300x250", name: "중간 직사각형", w: 300, h: 250, kb: 500, fmt: "jpg" },
-    { id: "inmobi-250x300", name: "세로 직사각형", w: 250, h: 300, kb: 500, fmt: "jpg" },
+    { id: "inmobi-640x100", name: "배너", w: 640, h: 100, kb: 10240, minKb: 80, dpi: 96, fmt: "png" },
+    { id: "inmobi-600x100", name: "배너", w: 600, h: 100, kb: 10240, minKb: 80, dpi: 96, fmt: "png" },
+    { id: "inmobi-600x500", name: "직사각형", w: 600, h: 500, kb: 10240, minKb: 80, dpi: 96, fmt: "png" },
+    { id: "inmobi-640x960", name: "전면 세로", w: 640, h: 960, kb: 10240, minKb: 80, dpi: 96, fmt: "png" },
+    { id: "inmobi-960x640", name: "전면 가로", w: 960, h: 640, kb: 10240, minKb: 80, dpi: 96, fmt: "png" },
+    { id: "inmobi-300x250", name: "중간 직사각형", w: 300, h: 250, kb: 10240, minKb: 80, dpi: 96, fmt: "png" },
+    { id: "inmobi-250x300", name: "세로 직사각형", w: 250, h: 300, kb: 10240, minKb: 80, dpi: 96, fmt: "png" },
   ]},
   // safe: 가이드상 요소를 두지 말아야 할 가장자리 여백(px). 재배치 시 이 안쪽에만 배치
   // NBT 애디슨오퍼월: 광고 제작가이드 v5.1 (2024.01)
@@ -465,7 +489,7 @@ function renderGroups() {
       ${g.items.map((p) => `<label class="opt">
         <input type="checkbox" data-id="${esc(p.id)}" ${state.selected.has(p.id) ? "checked" : ""}>
         <span class="nm">${esc(p.name)}</span>
-        <span class="sp mono">${p.w}×${p.h} · ${limitLabel(p.kb)} · ${fmtLabel(p)}${p.custom ? ` <button type="button" class="del" data-del="${esc(p.id)}" aria-label="${esc(p.name)} 삭제">삭제</button>` : ""}</span>
+        <span class="sp mono">${p.w}×${p.h} · ${specLabel(p)} · ${fmtLabel(p)}${p.custom ? ` <button type="button" class="del" data-del="${esc(p.id)}" aria-label="${esc(p.name)} 삭제">삭제</button>` : ""}</span>
       </label>`).join("")}
     </details>`;
   }).join("");
@@ -1422,6 +1446,46 @@ async function encodeJpg(c, max) {
   return { blob: b, ext: "jpg", q: 10, fits: false, note: "최저 품질로도 용량을 넘습니다. 단순한 이미지를 쓰거나 규격을 확인하세요" };
 }
 
+/* ---------- 파일 마무리: DPI 기록 · 용량 하한 맞추기 ---------- */
+const crcTable = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = (b) => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcTable[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function pngChunk(type, data) {
+  const out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+  dv.setUint32(0, data.length); for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+  out.set(data, 8); dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+  return out;
+}
+// 이미지 픽셀은 그대로 두고 파일 정보만 덧붙임 (PNG: pHYs·tEXt 청크, JPG: JFIF 밀도·COM 세그먼트)
+async function finalizeFile(blob, ext, p) {
+  const b = new Uint8Array(await blob.arrayBuffer()), min = (p.minKb || 0) * 1024;
+  let padded = false;
+  if (ext === "png") {
+    const head = b.subarray(0, 33), rest = b.subarray(33), parts = [head];
+    if (p.dpi) { const ppm = Math.round(p.dpi / 0.0254), d = new Uint8Array(9), dv = new DataView(d.buffer); dv.setUint32(0, ppm); dv.setUint32(4, ppm); d[8] = 1; parts.push(pngChunk("pHYs", d)); }
+    const size = parts.reduce((t, x) => t + x.length, 0) + rest.length;
+    if (size < min) {
+      const key = "Comment\0", d = new Uint8Array(Math.max(16, min - size - 12 + 32));
+      for (let i = 0; i < key.length; i++) d[i] = key.charCodeAt(i);
+      d.fill(32, key.length); parts.push(pngChunk("tEXt", d)); padded = true;
+    }
+    parts.push(rest);
+    return { blob: new Blob(parts, { type: "image/png" }), padded };
+  }
+  const j = b.slice();
+  const jfif = j[2] === 0xFF && j[3] === 0xE0 && j[6] === 0x4A && j[7] === 0x46;
+  if (p.dpi && jfif) { j[13] = 1; j[14] = p.dpi >> 8; j[15] = p.dpi & 255; j[16] = p.dpi >> 8; j[17] = p.dpi & 255; }
+  const cut = jfif ? 4 + ((j[4] << 8) | j[5]) : 2, parts = [j.subarray(0, cut)];
+  let pad = min - j.length;
+  while (pad > 0) {
+    const n = Math.min(65533, Math.max(1, pad - 4)), seg = new Uint8Array(n + 4);
+    seg[0] = 0xFF; seg[1] = 0xFE; seg[2] = (n + 2) >> 8; seg[3] = (n + 2) & 255; seg.fill(32, 4);
+    parts.push(seg); pad -= n + 4; padded = true;
+  }
+  parts.push(j.subarray(cut));
+  return { blob: new Blob(parts, { type: "image/jpeg" }), padded };
+}
+const specLabel = (p) => p.minKb ? `${p.minKb}KB 이상` : limitLabel(p.kb);
+
 /* ---------- 결과 ---------- */
 const modeOf = (p) => state.overrides[p.id] || state.mode;
 const fileName = (p, r) => `${state.name}_${p.media}_${p.name}_${p.w}x${p.h}.${r.ext}`.replace(/[\\/:*?"<>|()]/g, "").replace(/\s+/g, "");
@@ -1436,7 +1500,7 @@ function renderGrid() {
   grid.innerHTML = list.map((p) => {
     const r = state.results[p.id], m = modeOf(p);
     const chip = !r ? `<span class="chip busy"><span class="dot"></span>처리 중</span>`
-      : `<span class="chip ${r.fits ? "ok" : "over"}"><span class="dot"></span>${fmtKB(r.blob.size)} / ${limitLabel(p.kb)}</span>`;
+      : `<span class="chip ${r.fits ? "ok" : "over"}"><span class="dot"></span>${fmtKB(r.blob.size)} / ${specLabel(p)}</span>`;
     return `<article class="card" data-card="${esc(p.id)}">
       <div class="frame"><span class="dim mono">${p.w}×${p.h}</span>
         <div class="sheet">${r ? `<img src="${r.url}" alt="${esc(p.media)} ${esc(p.name)} 결과" style="aspect-ratio:${p.w}/${p.h}">` : `<img alt="" style="aspect-ratio:${p.w}/${p.h};width:${Math.min(200, p.w)}px">`}<i></i></div>
@@ -1476,6 +1540,12 @@ async function regenerate(only) {
     if (run !== state.run && !only) return;
     const out = render(p, modeOf(p));
     const r = await encode(out.canvas, p);
+    if (p.dpi || p.minKb) {
+      const f = await finalizeFile(r.blob, r.ext, p);
+      r.blob = f.blob;
+      r.fits = r.blob.size <= p.kb * 1024 && (!p.minKb || r.blob.size >= p.minKb * 1024);
+      if (f.padded) r.note = `용량 하한(${p.minKb}KB)을 맞추려고 이미지에 영향 없는 빈 메타데이터를 덧붙였습니다`;
+    }
     if (run !== state.run && !only) return;
     r.layout = out.layout; r.url = URL.createObjectURL(r.blob);
     state.results[p.id] = r;

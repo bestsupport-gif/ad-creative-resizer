@@ -2,7 +2,7 @@
 <title>광고 소재 추출기</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Noto+Sans+KR:wght@500;700;900&family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/1.0.11/pako.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/upng-js/2.1.0/UPNG.min.js"></script>
@@ -120,6 +120,9 @@ select.sm { border: 1px solid var(--line); border-radius: 4px; padding: 5px 6px;
 .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 4px; }
 .x:hover { color: var(--accent); }
 .ai-status { font-size: 12px; color: var(--muted); }
+.te { display: grid; gap: 8px; padding: 8px 8px 10px 24px; border-left: 2px solid var(--el-text); margin: 0 0 4px 10px; }
+.te textarea { width: 100%; min-width: 0; resize: vertical; border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; background: var(--surface); font: inherit; font-size: 13px; }
+.edited { font-weight: 600; color: var(--el-text); font-size: 11px; }
 .ai-status.err { color: var(--warn); }
 
 /* 누끼 */
@@ -567,9 +570,9 @@ async function makeSample() {
   const n = (X, Y, w, h) => ({ x: X / W, y: Y / H, w: w / W, h: h / H });
   const els = [
     { type: "logo", label: "AURA 로고", ...n(100, 95, 140, 60) },
-    { type: "text", label: "헤드라인 1줄", ...n(100, 268, 760, 108) },
-    { type: "text", label: "헤드라인 2줄", ...n(100, 380, 760, 104) },
-    { type: "text", label: "서브카피", ...n(100, 500, 760, 66) },
+    { type: "text", label: "헤드라인 1줄", content: "촉촉한 가을 피부,", ...n(100, 268, 760, 108) },
+    { type: "text", label: "헤드라인 2줄", content: "수분 앰플 30%", ...n(100, 380, 760, 104) },
+    { type: "text", label: "서브카피", content: "10월 한정 · 전 상품 무료배송", ...n(100, 500, 760, 66) },
     { type: "button", label: "지금 구매하기", ...n(100, 605, 350, 112) },
     { type: "image", label: "앰플 상품", ...n(880, 105, 680, 720) },
   ];
@@ -650,15 +653,47 @@ function renderElements() {
   const box = $("boxes");
   box.innerHTML = state.cutView ? "" : state.elements.map((e) => `<div class="box${e.id === state.selEl ? " sel" : ""}" data-type="${e.type}" data-el="${e.id}"
     style="left:${e.x * 100}%;top:${e.y * 100}%;width:${e.w * 100}%;height:${e.h * 100}%"><span>${TYPES[e.type]}</span>${state.editing && e.id === state.selEl ? '<i class="hd"></i>' : ""}</div>`).join("");
+  const edited = (e) => e.type === "text" && e.edit && e.edit.text.trim();
   $("els").innerHTML = state.elements.length ? state.elements.map((e) => `<div class="el${e.id === state.selEl ? " sel" : ""}" data-type="${e.type}" data-el="${e.id}">
       <span class="sw"></span>
       <select class="sm" data-eltype="${e.id}" aria-label="요소 종류">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${k === e.type ? "selected" : ""}>${v}</option>`).join("")}</select>
-      <span class="lb" title="${esc(e.label || "")}">${esc(e.label || "")}</span>
-      <button class="x" type="button" data-eldel="${e.id}" aria-label="요소 삭제">삭제</button>
-    </div>`).join("") : `<p class="hint">아직 요소가 없습니다. ${sampler ? "‘AI로 요소 찾기’를 누르거나 " : ""}‘직접 편집’을 켜고 이미지 위에서 끌어 텍스트·상품 영역을 지정하세요. 요소가 없으면 재배치 대신 맞추기로 처리합니다.</p>`;
+      <span class="lb" title="${esc(e.label || "")}">${edited(e) ? `<b class="edited">수정됨</b> ${esc(e.edit.text.split("\n")[0])}` : esc(e.label || "")}</span>
+      <span class="row" style="gap:2px;flex-wrap:nowrap">${e.type === "text" ? `<button class="x" type="button" data-tedit="${e.id}" aria-expanded="${state.textEdit === e.id}">${state.textEdit === e.id ? "닫기" : "수정"}</button>` : ""}<button class="x" type="button" data-eldel="${e.id}" aria-label="요소 삭제">삭제</button></span>
+    </div>${e.type === "text" && state.textEdit === e.id ? textEditor(e) : ""}`).join("") : `<p class="hint">아직 요소가 없습니다. ${sampler ? "‘AI로 요소 찾기’를 누르거나 " : ""}‘직접 편집’을 켜고 이미지 위에서 끌어 텍스트·상품 영역을 지정하세요. 요소가 없으면 재배치 대신 맞추기로 처리합니다.</p>`;
   $("elCount").textContent = state.elements.length ? `${state.elements.length}개` : "";
 }
+/* 문구 수정 */
+const EDIT_FONTS = { noto: '"Noto Sans KR"', bhs: '"Black Han Sans"', dohyeon: '"Do Hyeon"' };
+const measureCtx = document.createElement("canvas").getContext("2d");
+function textEditor(e) {
+  const ed = e.edit || {};
+  const color = ed.color || (prepCache && prepCache.tcolor && prepCache.tcolor.get(e.id)) || e.color || "#111111";
+  const text = ed.text != null ? ed.text : (e.content || "");
+  const opt = (v, cur, label) => `<option value="${v}" ${String(v) === String(cur) ? "selected" : ""}>${label}</option>`;
+  return `<div class="te" data-te="${e.id}">
+    <textarea id="teText" rows="2" placeholder="바꿀 문구를 입력하세요. 줄을 나누려면 Enter">${esc(text)}</textarea>
+    <div class="row">
+      <select class="sm" id="teFont" aria-label="폰트">${opt("noto", ed.font || "noto", "본고딕")}${opt("bhs", ed.font, "블랙한산스")}${opt("dohyeon", ed.font, "도현")}</select>
+      <select class="sm" id="teWeight" aria-label="굵기">${opt(900, ed.weight || 900, "아주 굵게")}${opt(700, ed.weight, "굵게")}${opt(500, ed.weight, "보통")}</select>
+      <input type="color" id="teColor" value="${color}" aria-label="글자 색">
+      <button class="linkbtn" type="button" data-tereset="${e.id}">원래 글자로</button>
+    </div>
+    <p class="hint">${e.content ? "AI가 읽은 원래 문구를 채워 두었습니다. " : ""}수정한 문구는 원래 글자를 지운 자리에 새 폰트로 그려지고, 규격마다 다시 줄바꿈됩니다. (재배치 결과에 적용)</p>
+  </div>`;
+}
+let teTimer;
+$("els").addEventListener("input", (ev) => {
+  const box = ev.target.closest("[data-te]"); if (!box) return;
+  const el = state.elements.find((x) => x.id === box.dataset.te); if (!el) return;
+  el.edit = { text: $("teText").value, font: $("teFont").value, weight: +$("teWeight").value, color: $("teColor").value };
+  clearTimeout(teTimer);
+  teTimer = setTimeout(async () => {
+    try { await document.fonts.load(`${el.edit.weight} 40px ${EDIT_FONTS[el.edit.font]}`, "가A"); } catch {}
+    regenerate((p) => !p.cutout);
+  }, 300);
+});
 $("els").addEventListener("change", (e) => {
+  if (e.target.closest("[data-te]")) return;
   const id = e.target.dataset.eltype; if (!id) return;
   const el = state.elements.find((x) => x.id === id); el.type = e.target.value;
   renderElements(); state.cut = null; regenerate();
@@ -666,6 +701,11 @@ $("els").addEventListener("change", (e) => {
 $("els").addEventListener("click", (e) => {
   const id = e.target.dataset.eldel;
   if (id) { state.elements = state.elements.filter((x) => x.id !== id); state.cut = null; renderElements(); regenerate(); return; }
+  const te = e.target.dataset.tedit;
+  if (te) { state.textEdit = state.textEdit === te ? null : te; renderElements(); if (state.textEdit) $("teText")?.focus(); return; }
+  const tr = e.target.dataset.tereset;
+  if (tr) { const el = state.elements.find((x) => x.id === tr); delete el.edit; state.textEdit = null; renderElements(); regenerate((p) => !p.cutout); return; }
+  if (e.target.closest("[data-te]")) return;
   const row = e.target.closest("[data-el]");
   if (row && e.target.tagName !== "SELECT") { state.selEl = row.dataset.el; renderElements(); }
 });
@@ -961,13 +1001,16 @@ async function detectElements() {
 - "deco": 문구 옆 반짝이 선, 작은 원, 점 같은 작은 장식(배경에서 지울 대상)
 큰 배경 곡선·그라데이션은 제외하세요. 배경 전체를 덮는 사진(풀블리드 사진, 배경 속 인물·풍경)은 image로 잡지 마세요. 그 위에 얹힌 문구·버튼·로고만 잡으면 됩니다. 각 박스는 요소를 완전히 감싸되 여유는 아주 조금만 두세요. 박스끼리 겹치지 않게 하세요.
 배경 사진이 있으면 사진 속 주인공(인물·상품 등)의 중심 좌표를 "subject"로 함께 주세요. 없으면 생략하세요.
+text 요소에는 화면에 보이는 문구를 그대로 "content"에, 주된 글자 색을 "#rrggbb" 형식으로 "color"에 넣어 주세요.
 좌표는 이미지 왼쪽 위 기준, 가로·세로를 각각 1000으로 본 정수입니다.
-JSON만 답하세요. 형식: {"elements":[{"type":"text","label":"짧은 한국어 설명","x":0,"y":0,"w":0,"h":0}],"subject":{"x":0,"y":0}}`;
+JSON만 답하세요. 형식: {"elements":[{"type":"text","label":"짧은 한국어 설명","content":"보이는 문구","color":"#ffffff","x":0,"y":0,"w":0,"h":0}],"subject":{"x":0,"y":0}}`;
   try {
     const out = await sampler.json(prompt, { images: [state.srcBlob], signal: aiCtl.signal });
     if (state.srcBlob !== blobAtStart) return;
     const list = (out && Array.isArray(out.elements) ? out.elements : []).map((e, i) => ({
       id: "a" + i + Date.now(), type: TYPES[e.type] ? e.type : "text", label: String(e.label || "").slice(0, 40),
+      content: typeof e.content === "string" ? e.content.slice(0, 200) : "",
+      color: /^#[0-9a-f]{6}$/i.test(e.color || "") ? e.color : "",
       x: clamp(+e.x / 1000, 0, 1), y: clamp(+e.y / 1000, 0, 1), w: clamp(+e.w / 1000, 0, 1), h: clamp(+e.h / 1000, 0, 1),
     })).filter((e) => e.w > 0.01 && e.h > 0.01).map((e) => ({ ...e, w: Math.min(e.w, 1 - e.x), h: Math.min(e.h, 1 - e.y) }));
     if (!list.length) { st.className = "ai-status err"; st.textContent = "요소를 찾지 못했습니다. ‘직접 편집’으로 지정해 주세요."; return; }
@@ -1194,23 +1237,27 @@ function getPrep() {
   // 2) 글자 분리: 복원된 배경과 차이가 큰 픽셀만 남긴 투명 레이어(matte) + 줄·단어 나누기
   const matte = document.createElement("canvas"); matte.width = W; matte.height = H;
   const mx = matte.getContext("2d"), md = mx.createImageData(W, H);
-  const texts = new Map();
+  const texts = new Map(), tcolor = new Map();
   for (const e of state.elements) {
     if (e.type !== "text") continue;
     const x0 = Math.max(0, Math.floor(e.x * W)), y0 = Math.max(0, Math.floor(e.y * H));
     const x1 = Math.min(W, Math.ceil((e.x + e.w) * W)), y1 = Math.min(H, Math.ceil((e.y + e.h) * H));
     const bw = x1 - x0, bh = y1 - y0; if (bw < 2 || bh < 2) continue;
     const fg = new Uint8Array(bw * bh);
+    let cr = 0, cg = 0, cb = 0, cn = 0;
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
       const i = y * W + x, r = wd[i * 4] - cd[i * 4], g = wd[i * 4 + 1] - cd[i * 4 + 1], b = wd[i * 4 + 2] - cd[i * 4 + 2];
       const dd = Math.sqrt(r * r + g * g + b * b), a = clamp((dd - 16) / 48, 0, 1);
       if (a > 0) { md.data[i * 4] = wd[i * 4]; md.data[i * 4 + 1] = wd[i * 4 + 1]; md.data[i * 4 + 2] = wd[i * 4 + 2]; md.data[i * 4 + 3] = Math.max(md.data[i * 4 + 3], Math.round(a * 255)); }
       if (dd > 45) fg[(y - y0) * bw + (x - x0)] = 1;
+      if (dd > 90) { cr += wd[i * 4]; cg += wd[i * 4 + 1]; cb += wd[i * 4 + 2]; cn++; }
     }
     texts.set(e.id, splitRows(fg, bw, bh, x0, y0));
+    // 글자 색: 배경과 확실히 다른 픽셀의 평균 (수정한 문구의 기본 색)
+    if (cn) tcolor.set(e.id, "#" + [cr, cg, cb].map((v) => Math.round(v / cn).toString(16).padStart(2, "0")).join(""));
   }
   mx.putImageData(md, 0, 0);
-  prepCache = { key, W, H, work, clean, matte, texts };
+  prepCache = { key, W, H, work, clean, matte, texts, tcolor };
   return prepCache;
 }
 
@@ -1235,7 +1282,15 @@ function buildSections(P) {
   };
   const secs = [];
   for (const e of els) {
-    if (e.type === "text") {
+    if (e.type === "text" && e.edit && e.edit.text.trim()) {
+      // 수정한 문구: 원래 글자 높이를 기준으로 새 폰트로 다시 그림
+      const rows = P.texts.get(e.id);
+      const lines = e.edit.text.split("\n").map((l) => l.trim()).filter(Boolean);
+      const ink = rows && rows.length ? Math.max(...rows.map((r) => r.h)) : (e.h * P.H) / lines.length / 1.3;
+      secs.push({ kind: "etext", type: "text", lines, size0: ink / 0.74, rowH: ink + 6,
+        family: EDIT_FONTS[e.edit.font] || EDIT_FONTS.noto, weight: e.edit.weight || 900,
+        color: e.edit.color || P.tcolor.get(e.id) || "#111111" });
+    } else if (e.type === "text") {
       const rows = P.texts.get(e.id); if (!rows || !rows.length) continue;
       secs.push({ kind: "text", type: "text", rows, rowH: Math.max(...rows.map((r) => r.y1 - r.y0)) });
     } else if (e.type === "item") {
@@ -1243,7 +1298,7 @@ function buildSections(P) {
       if (last && last.kind === "items") last.items.push(boxOf(e)); else secs.push({ kind: "items", type: "item", items: [boxOf(e)] });
     } else secs.push({ kind: "single", type: e.type, box: boxOf(e) });
   }
-  const maxRow = Math.max(0, ...secs.filter((s) => s.kind === "text").map((s) => s.rowH));
+  const maxRow = Math.max(0, ...secs.filter((s) => s.type === "text").map((s) => s.rowH));
   for (const s of secs) {
     if (s.kind === "items") {
       const gs = [];
@@ -1255,7 +1310,7 @@ function buildSections(P) {
       s.gap = gs.length ? gs[gs.length >> 1] : U * 0.025;
     }
     // 0 헤드라인 · 1 큰 문구/버튼 · 2 로고 · 3 이미지 · 4 카드 묶음 · 5 작은 문구
-    s.prio = s.kind === "text" ? (s.rowH >= maxRow * 0.95 ? 0 : s.rowH >= maxRow * 0.6 ? 1 : 5)
+    s.prio = s.type === "text" ? (s.rowH >= maxRow * 0.95 ? 0 : s.rowH >= maxRow * 0.6 ? 1 : 5)
       : s.type === "button" ? 1 : s.type === "logo" ? 2 : s.type === "image" ? 3 : 4;
   }
   // 좌우 배치에서 오른쪽(시각 요소) 단으로 보낼 묶음: 이미지·카드, 그리고 카드 묶음 바로 옆의 작은 문구
@@ -1280,6 +1335,28 @@ function smartLayout(p) {
 
   // s: 작업 이미지 대비 배율, cw: 쓸 수 있는 너비 → {w, h, put(x, y, colW, align, out)}
   const measure = (sec, s, cw) => {
+    if (sec.kind === "etext") {
+      // 수정한 문구: 출력 해상도에서 직접 줄바꿈하고 그림
+      const px = sec.size0 * s, font = `${sec.weight} ${px}px ${sec.family}, sans-serif`;
+      measureCtx.font = font;
+      const space = measureCtx.measureText(" ").width, lines = [];
+      sec.lines.forEach((src, li) => {
+        const words = src.split(/\s+/); let cur = [], curW = 0;
+        const flush = () => { if (!cur.length) return; const k = Math.min(1, cw / curW); lines.push({ text: cur.join(" "), w: curW * k, px: px * k, li }); cur = []; curW = 0; };
+        for (const w of words) {
+          const ww = measureCtx.measureText(w).width;
+          if (cur.length && curW + space + ww > cw) flush();
+          curW += (cur.length ? space : 0) + ww; cur.push(w);
+        }
+        flush();
+      });
+      let h = 0; const ys = [];
+      lines.forEach((ln, i) => { if (i) h += ln.px * (ln.li === lines[i - 1].li ? 0.18 : 0.28); ys.push(h); h += ln.px * 1.08; });
+      return { w: Math.max(...lines.map((l) => l.w)), h, put: (x, y, colW, align, out) => {
+        lines.forEach((ln, i) => out.push({ src: "text", text: ln.text, px: ln.px, family: sec.family, weight: sec.weight, color: sec.color,
+          dx: x + (align === "left" ? 0 : (colW - ln.w) / 2), dy: y + ys[i], dw: ln.w, dh: ln.px * 1.08 }));
+      } };
+    }
     if (sec.kind === "single") {
       const b = sec.box, k = Math.min(s, cw / b.sw), w = b.sw * k, h = b.sh * k;
       return { w, h, put: (x, y, colW, align, out) => out.push({ src: "work", ...b, dx: x + (align === "left" ? 0 : (colW - w) / 2), dy: y, dw: w, dh: h }) };
@@ -1333,7 +1410,7 @@ function smartLayout(p) {
   const stack = (secs, s, cw, align) => {
     const ms = secs.map((sec) => measure(sec, s, cw)), gaps = [];
     let h = 0;
-    ms.forEach((mm, i) => { if (i) { const g = (secs[i - 1].kind === "text" && secs[i].kind === "text" ? 0.022 : 0.045) * U * s; gaps.push(g); h += g; } h += mm.h; });
+    ms.forEach((mm, i) => { if (i) { const g = (secs[i - 1].type === "text" && secs[i].type === "text" ? 0.022 : 0.045) * U * s; gaps.push(g); h += g; } h += mm.h; });
     return { h, put(x, y, out) { let yy = y; ms.forEach((mm, i) => { if (i) yy += gaps[i - 1]; mm.put(x, yy, cw, align, out); yy += mm.h; }); } };
   };
   const fit = (ok) => { let lo = 0, hi = maxS; for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (ok(mid)) lo = mid; else hi = mid; } return lo; };
@@ -1349,7 +1426,7 @@ function smartLayout(p) {
   }
 
   // 헤드라인이 읽을 만한 크기(need px)로 들어가는 안 중에서 생략이 가장 적은 안 → 그중 가장 크게 들어가는 안
-  const maxRow = Math.max(1, ...all.filter((s) => s.kind === "text").map((s) => s.rowH));
+  const maxRow = Math.max(1, ...all.filter((s) => s.type === "text").map((s) => s.rowH));
   const need = Math.max(14, 0.045 * Math.sqrt(W * H), W / H >= 3 ? 0.24 * H : 0);
   let best = null;
   const better = (a, b) => {
@@ -1468,7 +1545,11 @@ function render(p, mode) {
       const P = getPrep();
       if (state.bgMode === "auto") drawCleanBg(x, p.w, p.h, P); else paintBackground(x, p.w, p.h);
       for (const it of L.items) {
-        if (it.src === "matte") {
+        if (it.src === "text") {
+          x.font = `${it.weight} ${it.px}px ${it.family}, sans-serif`;
+          x.fillStyle = it.color; x.textBaseline = "alphabetic";
+          x.fillText(it.text, it.dx, it.dy + it.px * 0.88);
+        } else if (it.src === "matte") {
           // 글자: 배경과 분리된 레이어에서 단어 단위로 옮김
           const dw = Math.max(1, Math.round(it.dw)), dh = Math.max(1, Math.round(it.dh));
           x.drawImage(stepDown(P.matte, it.sx, it.sy, it.sw, it.sh, dw, dh), Math.round(it.dx), Math.round(it.dy), dw, dh);
@@ -1706,6 +1787,9 @@ function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = fals
 renderGroups(); renderElements();
 (async () => {
   try { await document.fonts.ready; } catch {}
+  // 문구 수정용 폰트 미리 불러오기
+  Promise.all(['900 20px "Noto Sans KR"', '700 20px "Noto Sans KR"', '500 20px "Noto Sans KR"', '20px "Black Han Sans"', '20px "Do Hyeon"']
+    .map((f) => document.fonts.load(f, "가A"))).catch(() => {});
   const s = await makeSample();
   setSource(s.blob, "sample.png", s.els);
 })();

@@ -606,7 +606,7 @@ async function setSource(blob, name, presetEls) {
   state.src = img; state.srcUrl = url; state.srcBlob = blob; state.bytes = blob.size;
   state.name = name.replace(/\.[^.]+$/, "") || "image";
   state.focus = { x: 0.5, y: 0.5 }; state.overrides = {};
-  state.cut = null; state.elements = presetEls ? presetEls.map((e, i) => ({ id: "e" + i + Date.now(), ...e })) : [];
+  state.cut = null; state.photoBg = false; state.elements = presetEls ? presetEls.map((e, i) => ({ id: "e" + i + Date.now(), ...e })) : [];
   state.selEl = null;
   state.bgAuto = dominantBorder(img); $("bgAuto").textContent = state.bgMode === "auto" ? state.bgAuto : "";
   setCutView(false);
@@ -616,10 +616,9 @@ async function setSource(blob, name, presetEls) {
   placeFocus(); renderElements();
   if (presetEls) regenerate();
   else {
-    // 먼저 페이지 안에서 바로 자동 인식하고, AI를 쓸 수 있으면 AI 결과로 다듬음
-    runAutoDetect(sampler ? "자동 인식 결과를 먼저 보여드립니다. AI가 더 정확하게 다시 찾는 중입니다…"
-      : `자동 인식으로 요소를 찾았습니다. 이 화면에서는 AI 감지를 쓸 수 없어 자동 인식만 사용합니다. 어긋난 박스는 ‘직접 편집’으로 고치세요.`);
-    if (sampler) detectElements();
+    // 페이지 안에서 자동 인식 (토큰 사용 없음). AI는 결과가 어긋날 때 ‘AI로 요소 찾기’로 직접 실행
+    runAutoDetect(sampler ? "자동 인식으로 요소를 찾았습니다. 박스가 어긋나면 ‘AI로 요소 찾기’를 누르거나 ‘직접 편집’으로 고치세요."
+      : "자동 인식으로 요소를 찾았습니다. 어긋난 박스는 ‘직접 편집’으로 고치세요.");
   }
 }
 $("pick").addEventListener("click", () => $("file").click());
@@ -845,34 +844,49 @@ function autoDetect() {
     const seen = new Int32Array(N), q = new Int32Array(N); let id = 0;
     const satAt = (i) => Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) - Math.min(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
     for (let s = 0; s < N; s += 3) {
-      if (seen[s] || mag[s] > 40) continue;
+      if (seen[s] || mag[s] > 60) continue;
       const sr = d[s * 4], sg = d[s * 4 + 1], sb = d[s * 4 + 2];
+      // 채도 높은 면(버튼)은 그라데이션을 따라 이어 붙이고, 무채색 면(흰 카드)은 시작 색에 가까운 것만
+      const vivid = satAt(s) >= 60, mlim = vivid ? 60 : 40;
+      if (mag[s] > mlim) continue;
       id++; let qh = 0, qt = 0; q[qt++] = s; seen[s] = id;
       let x0 = W, y0 = H, x1 = 0, y1 = 0, cnt = 0;
       while (qh < qt) {
         const i = q[qh++], x = i % W, y = (i - x) / W; cnt++;
         if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
         for (const n of [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W]) {
-          if (n < 0 || n >= N || seen[n] || mag[n] > 40) continue;
+          if (n < 0 || n >= N || seen[n] || mag[n] > mlim) continue;
+          const er = d[n * 4] - d[i * 4], eg = d[n * 4 + 1] - d[i * 4 + 1], eb = d[n * 4 + 2] - d[i * 4 + 2];
           const dr = d[n * 4] - sr, dg = d[n * 4 + 1] - sg, db = d[n * 4 + 2] - sb;
-          if (dr * dr + dg * dg + db * db < 45 * 45) { seen[n] = id; q[qt++] = n; }
+          const ok = vivid ? er * er + eg * eg + eb * eb < 14 * 14 && dr * dr + dg * dg + db * db < 200 * 200 : dr * dr + dg * dg + db * db < 45 * 45;
+          if (ok) { seen[n] = id; q[qt++] = n; }
         }
       }
       const b = { x0, y0, x1: x1 + 1, y1: y1 + 1 }, w = b.x1 - b.x0, h = b.y1 - b.y0;
       if (!(cnt > N * 0.002 && area(b) < N * 0.3 && w >= W * 0.08 && h >= H * 0.03 && h < H * 0.3 && cnt / area(b) > 0.45)) continue;
       // 버튼·카드는 테두리를 따라 꽉 찬 사각형: 안쪽으로 조금 들어간 둘레가 대부분 같은 색이어야 함 (굵은 글자 획은 탈락)
-      const ix = Math.max(1, Math.round(w * 0.12)), iy = Math.max(1, Math.round(h * 0.18));
-      let on = 0, tot = 0;
-      for (let x = b.x0 + ix; x < b.x1 - ix; x += 2) for (const y of [b.y0 + iy, b.y1 - 1 - iy]) { tot++; if (seen[y * W + x] === id) on++; }
-      for (let y = b.y0 + iy; y < b.y1 - iy; y += 2) for (const x of [b.x0 + ix, b.x1 - 1 - ix]) { tot++; if (seen[y * W + x] === id) on++; }
-      if (!(tot && on / tot > 0.7)) continue;
-      // 채도 높은 가로로 긴 사각형은 버튼, 나머지는 카드 후보
-      if (satAt(s) >= 60 && w >= W * 0.2 && w / h >= 1.6 && w / h <= 16 && h < H * 0.2) buttons.push(b);
-      else if (satAt(s) < 60 || (w >= W * 0.15 && h >= H * 0.06)) rects.push(b);
+      // 가장자리 바로 안쪽 둘레를 봄 (둥근 버튼은 양 끝 반원만큼 건너뜀) → 안에 다른 색 칸·글자가 있어도 영향 없음
+      const coverAt = (ix, iy) => {
+        let on = 0, tot = 0;
+        for (let x = b.x0 + ix; x < b.x1 - ix; x += 2) for (const y of [b.y0 + iy, b.y1 - 1 - iy]) { tot++; if (seen[y * W + x] === id) on++; }
+        for (let y = b.y0 + iy; y < b.y1 - iy; y += 2) for (const x of [b.x0 + ix, b.x1 - 1 - ix]) { tot++; if (seen[y * W + x] === id) on++; }
+        return tot ? on / tot : 0;
+      };
+      const coverEdge = coverAt(Math.min(Math.round(w * 0.3), Math.max(2, Math.round(h * 0.5))), Math.max(2, Math.round(h * 0.06)));
+      const coverIn = coverAt(Math.max(1, Math.round(w * 0.12)), Math.max(1, Math.round(h * 0.18)));
+      // 채도 높은 가로로 긴 사각형은 버튼(안에 다른 색 칸이 있어도 허용), 나머지는 카드 후보
+      if (Math.max(coverEdge, coverIn) > 0.6 && satAt(s) >= 60 && w >= W * 0.2 && w / h >= 1.6 && w / h <= 16 && h < H * 0.2) buttons.push(b);
+      else if ((coverIn > 0.7 || coverEdge > 0.8) && (satAt(s) < 60 || (w >= W * 0.15 && h >= H * 0.06))) rects.push(b);
     }
   }
   // 비슷한 크기로 2개 이상 반복되는 평평한 사각형 = 카드·타일 (테두리·그림자까지 조금 넓혀 잡음)
-  const cards = rects.filter((a) => rects.some((o) => o !== a && Math.abs((o.y1 - o.y0) - (a.y1 - a.y0)) <= (a.y1 - a.y0) * 0.2))
+  // 쌍둥이 조건: 높이 ±20%, 폭 ±35%, 같은 줄(위쪽 정렬) 또는 같은 열(왼쪽 정렬)
+  const twin = (a, o) => {
+    const ha = a.y1 - a.y0, wa = a.x1 - a.x0, ho = o.y1 - o.y0, wo = o.x1 - o.x0;
+    return Math.abs(ho - ha) <= ha * 0.2 && Math.max(wa, wo) / Math.min(wa, wo) <= 1.35
+      && (Math.abs(o.y0 - a.y0) < ha * 0.3 || Math.abs(o.x0 - a.x0) < wa * 0.3 || Math.abs((o.x0 + o.x1) - (a.x0 + a.x1)) < wa * 0.6);
+  };
+  const cards = rects.filter((a) => rects.some((o) => o !== a && twin(a, o)))
     .map((b) => ({ x0: Math.max(0, b.x0 - r * 2), y0: Math.max(0, b.y0 - r * 2), x1: Math.min(W, b.x1 + r * 2), y1: Math.min(H, b.y1 + r * 2) }));
   const Fx = F.slice();
   for (const b of [...buttons, ...cards]) clearBox(Fx, b, r * 2);
@@ -881,7 +895,7 @@ function autoDetect() {
   const S = new Uint8Array(N);
   for (let i = 0; i < N; i++) S[i] = Fx[i] && mag[i] > 120 ? 1 : 0;
   let glyphs = label(dilate(S, Math.max(1, Math.round(Math.min(W, H) * 0.003))), S, 0.00002)
-    .filter((g) => { const h = g.y1 - g.y0, w = g.x1 - g.x0; return h >= H * 0.012 && h <= H * 0.16 && w <= W * 0.5; });
+    .filter((g) => { const h = g.y1 - g.y0, w = g.x1 - g.x0; return h >= H * 0.012 && h <= H * 0.22 && w <= W * 0.95 && !(h > H * 0.08 && g.fc / (w * h) < 0.12); });
   glyphs.forEach((g) => (g.n = 1));
   let changed = true;
   while (changed) {
@@ -898,11 +912,13 @@ function autoDetect() {
   }
   const texts = glyphs.filter((g) => {
     const w = g.x1 - g.x0, h = g.y1 - g.y0, dens = g.fc / area(g);
-    return (g.n >= 2 || w / h >= 2.2) && dens > 0.04 && dens < 0.75;
+    return (g.n >= 2 || w / h >= 2.2) && dens > 0.04 && dens < 0.75 && h <= H * 0.2;
   });
   // 연한 획(그라데이션 글자 윗부분, "+" 같은 기호)까지 문구 박스에 포함
-  const colHas = (x, y0, y1) => { for (let y = y0; y < y1; y++) if (Fx[y * W + x]) return true; return false; };
-  const rowHas = (y, x0, x1) => { let c = 0; for (let x = x0; x < x1; x++) c += Fx[y * W + x]; return c > (x1 - x0) * 0.01; };
+  // 넓힐 때는 선명한 경계(mag>60)만 봄: 광원 번짐·빛줄기는 무시
+  const sharp = (i) => Fx[i] && mag[i] > 60;
+  const colHas = (x, y0, y1) => { for (let y = y0; y < y1; y++) if (sharp(y * W + x)) return true; return false; };
+  const rowHas = (y, x0, x1) => { let c = 0; for (let x = x0; x < x1; x++) c += sharp(y * W + x); return c > (x1 - x0) * 0.01; };
   for (const t of texts) {
     const th = t.y1 - t.y0;
     const cy0 = Math.round(t.y0 + th * 0.2), cy1 = Math.round(t.y1 - th * 0.2);
@@ -917,19 +933,33 @@ function autoDetect() {
       }
     }
   }
+  // 넓히다가 윗줄 문구와 겹치면 겹친 만큼 되돌림
+  texts.sort((a, b) => a.y0 - b.y0);
+  for (let i = 1; i < texts.length; i++) for (let j = 0; j < i; j++) {
+    const a = texts[j], t = texts[i];
+    if (Math.min(a.x1, t.x1) > Math.max(a.x0, t.x0) && t.y0 < a.y1 && (a.y0 + a.y1) < (t.y0 + t.y1) && a.y1 < t.y1) t.y0 = Math.min(Math.max(t.y0, a.y1), t.y1 - 1);
+  }
   const within = (a, b) => { const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0); return ox > 0 && oy > 0 && ox * oy >= area(a) * 0.7; };
   for (let i = texts.length - 1; i >= 0; i--) if (texts.some((b, j) => j !== i && area(b) >= area(texts[i]) && within(texts[i], b))) texts.splice(i, 1);
-  const Fo = Fx.slice();
+  // 오브젝트는 윤곽선(mag>34)으로만 찾음: 광원 번짐·빛줄기처럼 경계가 흐린 것은 제외
+  const Fo = new Uint8Array(N);
+  for (let i = 0; i < N; i++) Fo[i] = Fx[i] && mag[i] > 34 ? 1 : 0;
   for (const t of texts) clearBox(Fo, t, r * 2);
 
   // 3) 남은 것: 상품·이미지 / 카드 / 장식
-  let objs = label(dilate(Fo, r), Fo, 0.0003);
-  objs = objs.filter((b) => !(area(b) > N * 0.1 && b.fc / area(b) < 0.04));
+  let objs = label(dilate(Fo, r * 2), Fo, 0.0003);
+  objs = objs.filter((b) => !(area(b) > N * 0.1 && b.fc / area(b) < 0.02));
   const big = objs.reduce((m, b) => (!m || area(b) > area(m) ? b : m), null);
-  // 배경 전체가 사진이면(가장 큰 덩어리가 화면 대부분) 사진은 배경으로 두고 피사체를 중심점으로
-  const photo = !!big && area(big) > N * 0.35;
+  // 배경 전체가 사진이면(가장 큰 덩어리가 화면 가장자리 두 곳 이상에 닿고 넓음) 사진은 배경으로 두고 피사체를 중심점으로
+  // 가장자리 닿음: 화면 끝 또는 버튼 바로 앞에서 끝나는 경우 (사진이 CTA 바 위까지 이어지는 구성)
+  const nearBtn = (b) => buttons.some((t) => Math.abs(t.y0 - b.y1) < H * 0.02 && t.x1 > b.x0 && t.x0 < b.x1);
+  const edgeTouch = (b) => [b.x0 <= W * 0.02, b.y0 <= H * 0.02, b.x1 >= W * 0.98, b.y1 >= H * 0.98 || nearBtn(b)].filter(Boolean).length;
+  const photo = !!big && area(big) > N * 0.25 && edgeTouch(big) >= 2;
   let focus = null;
-  if (photo) { focus = { x: clamp(big.mx / W, 0.1, 0.9), y: clamp(big.my / H, 0.1, 0.9) }; objs = objs.filter((b) => b !== big && area(b) < N * 0.05); }
+  // 사진 배경이면 사진 속 사물은 옮기지도 지우지도 않음
+  if (photo) { focus = { x: clamp(big.mx / W, 0.1, 0.9), y: clamp(big.my / H, 0.1, 0.9) }; objs = []; }
+  // 모서리에 붙은 작은 덩어리(광원 번짐 등)는 배경의 일부
+  else objs = objs.filter((b) => !(edgeTouch(b) >= 2 && area(b) < N * 0.15));
   for (const b of objs) {
     const bw2 = b.x1 - b.x0, bh2 = b.y1 - b.y0, band = Math.max(2, r + 1);
     let on = 0, tot = 0;
@@ -943,7 +973,7 @@ function autoDetect() {
 
   const out = [], objOut = [];
   for (const b of buttons) out.push({ type: "button", ...b });
-  for (const b of cards) out.push({ type: "item", ...b });
+  for (const b of cards) if (!buttons.some((t) => inside(b, t))) out.push({ type: "item", ...b });
   const overlapFrac = (a, b) => { const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0); return ox > 0 && oy > 0 ? (ox * oy) / area(a) : 0; };
   objs = objs.filter((a) => cards.reduce((s, b) => s + overlapFrac(a, b), 0) < 0.25 && buttons.reduce((s, b) => s + overlapFrac(a, b), 0) < 0.25);
   const framed = objs.filter((b) => b.framed);
@@ -962,6 +992,8 @@ function autoDetect() {
   const holders = [...out, ...objOut.filter((o) => o.type !== "deco")];
   for (const t of texts) if (!holders.some((b) => inside(t, b)) && cards.reduce((s, b) => s + overlapFrac(t, b), 0) < 0.4) out.push({ type: "text", ...t });
   out.push(...objOut);
+  // 이미지 안에 들어간 카드·버튼 후보(ID 카드의 얼굴 칸, 3D 카드의 파란 면 등)는 이미지의 일부
+  for (let i = out.length - 1; i >= 0; i--) if ((out[i].type === "item" || out[i].type === "button") && objOut.some((o) => o.type === "image" && inside(out[i], o))) out.splice(i, 1);
   const pad = r;
   const els = out.map((b, i) => ({
     id: "d" + i + Date.now(), type: b.type, label: "자동 인식",
@@ -974,7 +1006,7 @@ function autoDetect() {
 function runAutoDetect(note) {
   if (!state.src) return;
   const { els: list, focus, photo } = autoDetect();
-  state.elements = list; state.selEl = null; state.cut = null;
+  state.elements = list; state.selEl = null; state.cut = null; state.photoBg = photo;
   if (focus) { state.focus = focus; placeFocus(); }
   const st = $("aiStatus"); st.hidden = false; st.className = "ai-status";
   st.textContent = (note || `자동 인식으로 ${list.length}개 요소를 찾았습니다. 어긋난 박스는 ‘직접 편집’으로 고치세요.`)
@@ -1015,7 +1047,9 @@ JSON만 답하세요. 형식: {"elements":[{"type":"text","label":"짧은 한국
     })).filter((e) => e.w > 0.01 && e.h > 0.01).map((e) => ({ ...e, w: Math.min(e.w, 1 - e.x), h: Math.min(e.h, 1 - e.y) }));
     if (!list.length) { st.className = "ai-status err"; st.textContent = "요소를 찾지 못했습니다. ‘직접 편집’으로 지정해 주세요."; return; }
     state.elements = list; state.selEl = null; state.cut = null;
-    if (out && out.subject && isFinite(+out.subject.x) && isFinite(+out.subject.y)) { state.focus = { x: clamp(+out.subject.x / 1000, 0, 1), y: clamp(+out.subject.y / 1000, 0, 1) }; placeFocus(); }
+    const hasSubject = out && out.subject && isFinite(+out.subject.x) && isFinite(+out.subject.y) && (+out.subject.x || +out.subject.y);
+    if (hasSubject) { state.focus = { x: clamp(+out.subject.x / 1000, 0, 1), y: clamp(+out.subject.y / 1000, 0, 1) }; placeFocus(); }
+    state.photoBg = !!hasSubject && !list.some((e) => e.type === "image" && e.w * e.h > 0.08);
     st.textContent = `${list.length}개 요소를 찾았습니다. 박스가 어긋나면 ‘직접 편집’으로 고치세요.`;
     renderElements(); regenerate();
   } catch (err) {
@@ -1278,7 +1312,7 @@ function buildSections(P) {
   const pad = U * 0.006;
   const boxOf = (e) => {
     const sx = Math.max(0, e.x * P.W - pad), sy = Math.max(0, e.y * P.H - pad);
-    return { sx, sy, sw: Math.min(P.W - sx, e.w * P.W + 2 * pad), sh: Math.min(P.H - sy, e.h * P.H + 2 * pad) };
+    return { sx, sy, sw: Math.min(P.W - sx, e.w * P.W + 2 * pad), sh: Math.min(P.H - sy, e.h * P.H + 2 * pad), elId: e.id };
   };
   const secs = [];
   for (const e of els) {
@@ -1319,7 +1353,10 @@ function buildSections(P) {
     s.visual = s.type === "image" || s.kind === "items" || (s.prio === 5 && nearItems);
   });
   // 세로로 쌓을 때 버튼은 맨 아래
-  return [...secs.filter((s) => s.type !== "button"), ...secs.filter((s) => s.type === "button")];
+  // 세로로 쌓을 때 가장 아래에 있던 버튼(CTA) 하나만 맨 아래로, 나머지(상단 라벨 등)는 원래 순서
+  const btns = secs.filter((s) => s.type === "button");
+  const cta = btns.reduce((m, s) => (!m || s.box.sy + s.box.sh > m.box.sy + m.box.sh ? s : m), null);
+  return cta ? [...secs.filter((s) => s !== cta), cta] : secs;
 }
 
 function smartLayout(p) {
@@ -1461,20 +1498,61 @@ function smartLayout(p) {
       } });
     }
   }
+  // 사진 배경 + 가로형: 문구는 피사체 반대쪽에 모으고, 배경은 피사체가 그 반대편에 오도록 맞춤
+  if (state.photoBg && W / H >= 1.3) {
+    // 원본에서 문구가 있던 쪽을 유지 (문구가 왼쪽이면 배경은 오른쪽 기준으로 잘라 피사체를 살림)
+    const tEls = state.elements.filter((e) => e.type === "text");
+    const textLeft = tEls.length ? tEls.reduce((s, e) => s + e.x + e.w / 2, 0) / tEls.length < 0.5 : state.focus.x >= 0.5;
+    const cw = aw * 0.56;
+    for (const { secs, k } of variants) {
+      const r = fitStack(secs, cw, "left");
+      consider({ score: r.s * 1.2, hp: r.s * maxRow, k, name: "사진 옆 배치", bgAnchor: textLeft ? "right" : "left",
+        place: () => { const out = []; r.st.put(textLeft ? L0 : W - R0 - cw, T0 + (ah - r.st.h) / 2, out); return out; } });
+    }
+  }
   // 원본 배치는 비율이 거의 같을 때(±10%)만 후보로
   if (!p.safe && Math.abs(Math.log((W / H) / (P.W / P.H))) < 0.1) {
     const s = Math.min(W / P.W, H / P.H);
     consider({ score: s * 1.08, hp: s * maxRow, k: 0, name: "원본 배치", place: () => [{ src: "work", sx: 0, sy: 0, sw: P.W, sh: P.H, dx: (W - P.W * s) / 2, dy: (H - P.H * s) / 2, dw: P.W * s, dh: P.H * s, region: true }] });
   }
-  return { name: best.name + (best.k ? ` · ${best.k}개 생략` : ""), items: best.place() };
+  return { name: best.name + (best.k ? ` · ${best.k}개 생략` : ""), items: best.place(), bgAnchor: best.bgAnchor || 0.5 };
+}
+
+// 잘라낼 영역에 걸친 다른 요소(문구·버튼 등)는 복원된 배경으로 덮은 원본을 돌려줌 → 글자 조각이 따라오지 않음
+const isoCache = new Map();
+function isolatedSource(P, it) {
+  const others = state.elements.filter((e) => e.id !== it.elId && e.type !== "deco" && e.type !== "image").map((e) => ({
+    x0: e.x * P.W, y0: e.y * P.H, x1: (e.x + e.w) * P.W, y1: (e.y + e.h) * P.H, e,
+  })).filter((o) => o.x1 > it.sx && o.x0 < it.sx + it.sw && o.y1 > it.sy && o.y0 < it.sy + it.sh);
+  // 이 요소를 거의 다 덮는 요소(겹친 카드 안의 글자 등)는 건드리지 않음
+  const self = state.elements.find((e) => e.id === it.elId);
+  const keep = others.filter((o) => {
+    if (!self) return true;
+    const sx0 = self.x * P.W, sy0 = self.y * P.H, sx1 = (self.x + self.w) * P.W, sy1 = (self.y + self.h) * P.H;
+    const ox = Math.min(o.x1, sx1) - Math.max(o.x0, sx0), oy = Math.min(o.y1, sy1) - Math.max(o.y0, sy0);
+    return !(ox > 0 && oy > 0 && ox * oy >= (o.x1 - o.x0) * (o.y1 - o.y0) * 0.9);
+  });
+  if (!keep.length) return P.work;
+  const key = P.key + "|" + it.elId;
+  if (isoCache.has(key)) return isoCache.get(key);
+  const c = document.createElement("canvas"); c.width = P.W; c.height = P.H;
+  const x = c.getContext("2d"); x.drawImage(P.work, 0, 0);
+  for (const o of keep) {
+    const pad = Math.min(P.W, P.H) * 0.006;
+    const bx = Math.max(0, o.x0 - pad), by = Math.max(0, o.y0 - pad), bw = Math.min(P.W, o.x1 + pad) - bx, bh = Math.min(P.H, o.y1 + pad) - by;
+    x.drawImage(P.clean, bx, by, bw, bh, bx, by, bw, bh);
+  }
+  if (isoCache.size > 40) isoCache.clear();
+  isoCache.set(key, c);
+  return c;
 }
 
 // 복원된 배경을 새 비율로 늘림 (1.6배까지는 늘리고, 그 이상은 중심점 기준으로 잘라냄)
-function drawCleanBg(x, W, H, P) {
+function drawCleanBg(x, W, H, P, anchor = 0.5) {
   const A = P.W / P.H, T = W / H, k = clamp(T / A, 1 / 1.6, 1.6), need = T / k;
   let sw = P.W, sh = P.H;
   if (need > A) sh = P.W / need; else sw = P.H * need;
-  const sx = clamp(state.focus.x * P.W - sw / 2, 0, P.W - sw), sy = clamp(state.focus.y * P.H - sh / 2, 0, P.H - sh);
+  const sx = anchor === "right" ? P.W - sw : anchor === "left" ? 0 : clamp(state.focus.x * P.W - sw * anchor, 0, P.W - sw), sy = clamp(state.focus.y * P.H - sh / 2, 0, P.H - sh);
   x.imageSmoothingQuality = "high";
   x.drawImage(P.clean, sx, sy, sw, sh, 0, 0, W, H);
 }
@@ -1543,7 +1621,7 @@ function render(p, mode) {
     const L = smartLayout(p);
     if (L) {
       const P = getPrep();
-      if (state.bgMode === "auto") drawCleanBg(x, p.w, p.h, P); else paintBackground(x, p.w, p.h);
+      if (state.bgMode === "auto") drawCleanBg(x, p.w, p.h, P, L.bgAnchor); else paintBackground(x, p.w, p.h);
       for (const it of L.items) {
         if (it.src === "text") {
           x.font = `${it.weight} ${it.px}px ${it.family}, sans-serif`;
@@ -1554,7 +1632,7 @@ function render(p, mode) {
           const dw = Math.max(1, Math.round(it.dw)), dh = Math.max(1, Math.round(it.dh));
           x.drawImage(stepDown(P.matte, it.sx, it.sy, it.sw, it.sh, dw, dh), Math.round(it.dx), Math.round(it.dy), dw, dh);
         } else {
-          drawFeathered(x, P.work, it, it.region ? Math.min(p.w, p.h) * 0.02 : Math.min(it.dw, it.dh) * 0.06);
+          drawFeathered(x, it.elId ? isolatedSource(P, it) : P.work, it, it.region ? Math.min(p.w, p.h) * 0.02 : Math.min(it.dw, it.dh) * 0.06);
         }
       }
       return { canvas: c, layout: L.name };

@@ -87,6 +87,16 @@ button, input, select { font: inherit; color: inherit; }
 .el[data-type="deco"] { --c: var(--el-deco); }
 .stage.editing { cursor: crosshair; }
 .stage.editing .box { cursor: move; }
+.box.poly { border-width: 1px; border-style: dashed; background: transparent; }
+.polys { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.polys polygon, .polys polyline { stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.polys [data-type="text"] { stroke: var(--el-text); fill: color-mix(in srgb, var(--el-text) 16%, transparent); }
+.polys [data-type="image"] { stroke: var(--el-image); fill: color-mix(in srgb, var(--el-image) 16%, transparent); }
+.polys [data-type="logo"] { stroke: var(--el-logo); fill: color-mix(in srgb, var(--el-logo) 16%, transparent); }
+.polys [data-type="button"] { stroke: var(--el-button); fill: color-mix(in srgb, var(--el-button) 16%, transparent); }
+.polys [data-type="item"] { stroke: var(--el-item); fill: color-mix(in srgb, var(--el-item) 16%, transparent); }
+.polys [data-type="deco"] { stroke: var(--el-deco); fill: color-mix(in srgb, var(--el-deco) 16%, transparent); }
+.polys polyline { fill: none; }
 .src-meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .src-meta b { color: var(--ink); font-weight: 500; overflow-wrap: anywhere; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -250,9 +260,17 @@ details.add summary { cursor: pointer; font-size: 13px; font-weight: 500; color:
             <button class="btn" type="button" id="editBtn" aria-pressed="false">직접 편집</button>
           </div>
         </div>
+        <div class="row" id="shapeRow" hidden>
+          <span class="label">새 영역 모양</span>
+          <div class="seg" role="group" aria-label="새 영역 모양">
+            <button type="button" data-shape="rect" aria-pressed="true">사각형</button>
+            <button type="button" data-shape="free" aria-pressed="false">자유형</button>
+          </div>
+          <span class="hint">자유형: 이미지 위를 따라 그리면 그 모양대로 영역이 됩니다</span>
+        </div>
         <span class="ai-status" id="aiStatus" hidden></span>
         <div class="els" id="els"></div>
-        <p class="hint" id="editHint">‘직접 편집’을 켜면 이미지 위에서 끌어 새 요소를 그리고, 박스를 끌어 옮기고, 오른쪽 아래 모서리로 크기를 바꿀 수 있습니다. 문구 박스는 여러 줄을 묶어도 줄·단어를 자동으로 나눕니다. 로고 칸처럼 반복되는 칸은 ‘카드·타일’로 하나씩 지정하면 규격에 맞게 다시 줄 세웁니다. 반짝이 선 같은 장식은 ‘장식(지우기)’로 지정하면 배경에서 지워집니다.</p>
+        <p class="hint" id="editHint">‘직접 편집’을 켜면 이미지 위에서 끌어 새 요소를 그리고, 박스를 끌어 옮기고, 오른쪽 아래 모서리로 크기를 바꿀 수 있습니다. 기울어진 손글씨나 화살표·별이 붙은 문구처럼 네모로 감싸기 어려운 것은 ‘자유형’으로 둘레를 따라 그리세요. 자유형 문구는 줄바꿈하지 않고 모양 그대로 옮깁니다. 문구 박스는 여러 줄을 묶어도 줄·단어를 자동으로 나눕니다. 로고 칸처럼 반복되는 칸은 ‘카드·타일’로 하나씩 지정하면 규격에 맞게 다시 줄 세웁니다. 반짝이 선 같은 장식은 ‘장식(지우기)’로 지정하면 배경에서 지워집니다.</p>
       </div>
 
       <div class="sub" id="cutPanel" hidden>
@@ -606,7 +624,7 @@ async function setSource(blob, name, presetEls) {
   state.src = img; state.srcUrl = url; state.srcBlob = blob; state.bytes = blob.size;
   state.name = name.replace(/\.[^.]+$/, "") || "image";
   state.focus = { x: 0.5, y: 0.5 }; state.overrides = {};
-  state.cut = null; state.photoBg = false; state.elements = presetEls ? presetEls.map((e, i) => ({ id: "e" + i + Date.now(), ...e })) : [];
+  state.cut = null; state.photoBg = false; state.subject = null; state.elements = presetEls ? presetEls.map((e, i) => ({ id: "e" + i + Date.now(), ...e })) : [];
   state.selEl = null;
   state.bgAuto = dominantBorder(img); $("bgAuto").textContent = state.bgMode === "auto" ? state.bgAuto : "";
   setCutView(false);
@@ -650,8 +668,12 @@ $("bg").addEventListener("change", (e) => { state.bgCustom = e.target.value; reg
 /* ---------- 요소 편집 ---------- */
 function renderElements() {
   const box = $("boxes");
-  box.innerHTML = state.cutView ? "" : state.elements.map((e) => `<div class="box${e.id === state.selEl ? " sel" : ""}" data-type="${e.type}" data-el="${e.id}"
-    style="left:${e.x * 100}%;top:${e.y * 100}%;width:${e.w * 100}%;height:${e.h * 100}%"><span>${TYPES[e.type]}</span>${state.editing && e.id === state.selEl ? '<i class="hd"></i>' : ""}</div>`).join("");
+  const pts = (poly) => poly.map(([px, py]) => `${px},${py}`).join(" ");
+  const polys = state.elements.filter((e) => e.poly && e.poly.length > 1);
+  box.innerHTML = state.cutView ? "" : (polys.length ? `<svg class="polys" viewBox="0 0 1 1" preserveAspectRatio="none">${polys.map((e) =>
+      drag && drag.kind === "free" && drag.el === e ? `<polyline data-type="${e.type}" points="${pts(e.poly)}"/>` : `<polygon data-type="${e.type}" points="${pts(e.poly)}"/>`).join("")}</svg>` : "")
+    + state.elements.map((e) => `<div class="box${e.id === state.selEl ? " sel" : ""}${e.poly ? " poly" : ""}" data-type="${e.type}" data-el="${e.id}"
+    style="left:${e.x * 100}%;top:${e.y * 100}%;width:${e.w * 100}%;height:${e.h * 100}%"><span>${TYPES[e.type]}${e.poly ? "·자유형" : ""}</span>${state.editing && e.id === state.selEl ? '<i class="hd"></i>' : ""}</div>`).join("");
   const edited = (e) => e.type === "text" && e.edit && e.edit.text.trim();
   $("els").innerHTML = state.elements.length ? state.elements.map((e) => `<div class="el${e.id === state.selEl ? " sel" : ""}" data-type="${e.type}" data-el="${e.id}">
       <span class="sw"></span>
@@ -713,8 +735,18 @@ $("editBtn").addEventListener("click", () => {
   $("editBtn").setAttribute("aria-pressed", state.editing);
   $("stage").classList.toggle("editing", state.editing);
   if (state.editing && state.cutView) setCutView(false);
+  $("shapeRow").hidden = !state.editing;
   placeFocus(); renderElements();
 });
+document.querySelectorAll("[data-shape]").forEach((b) => b.addEventListener("click", () => {
+  state.drawShape = b.dataset.shape;
+  document.querySelectorAll("[data-shape]").forEach((o) => o.setAttribute("aria-pressed", o === b));
+}));
+// 자유형 영역의 둘레 점들로 박스 범위를 다시 계산
+function polyBounds(el) {
+  const xs = el.poly.map((p) => p[0]), ys = el.poly.map((p) => p[1]);
+  el.x = Math.min(...xs); el.y = Math.min(...ys); el.w = Math.max(...xs) - el.x; el.h = Math.max(...ys) - el.y;
+}
 document.addEventListener("keydown", (e) => {
   if (!state.editing || !state.selEl || !["Delete", "Backspace"].includes(e.key)) return;
   if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
@@ -741,6 +773,11 @@ $("stage").addEventListener("pointerdown", (e) => {
   if (sel && Math.abs(p.x - (sel.x + sel.w)) < hpx && Math.abs(p.y - (sel.y + sel.h)) < hpy) { drag = { kind: "resize", el: sel }; return; }
   const hit = [...state.elements].reverse().find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h);
   if (hit) { state.selEl = hit.id; drag = { kind: "move", el: hit, ox: p.x - hit.x, oy: p.y - hit.y }; renderElements(); return; }
+  if (state.drawShape === "free") {
+    const el = { id: "e" + Date.now(), type: "text", label: "직접 지정 (자유형)", poly: [[p.x, p.y]], x: p.x, y: p.y, w: 0, h: 0 };
+    state.elements.push(el); state.selEl = el.id;
+    drag = { kind: "free", el }; renderElements(); return;
+  }
   const el = { id: "e" + Date.now(), type: "text", label: "직접 지정", x: p.x, y: p.y, w: 0, h: 0 };
   state.elements.push(el); state.selEl = el.id;
   drag = { kind: "draw", el, sx: p.x, sy: p.y }; renderElements();
@@ -750,17 +787,35 @@ $("stage").addEventListener("pointermove", (e) => {
   const p = normPoint(e), el = drag.el;
   if (drag.kind === "focus") { state.focus = { x: p.x, y: p.y }; placeFocus(); return; }
   if (drag.kind === "draw") { el.x = Math.min(drag.sx, p.x); el.y = Math.min(drag.sy, p.y); el.w = Math.abs(p.x - drag.sx); el.h = Math.abs(p.y - drag.sy); }
-  if (drag.kind === "move") { el.x = clamp(p.x - drag.ox, 0, 1 - el.w); el.y = clamp(p.y - drag.oy, 0, 1 - el.h); }
-  if (drag.kind === "resize") { el.w = clamp(p.x - el.x, 0.01, 1 - el.x); el.h = clamp(p.y - el.y, 0.01, 1 - el.y); }
+  if (drag.kind === "free") {
+    const last = el.poly[el.poly.length - 1];
+    if (Math.hypot(p.x - last[0], p.y - last[1]) > 0.004) { el.poly.push([p.x, p.y]); polyBounds(el); }
+  }
+  if (drag.kind === "move") {
+    const nx = clamp(p.x - drag.ox, 0, 1 - el.w), ny = clamp(p.y - drag.oy, 0, 1 - el.h);
+    if (el.poly) el.poly = el.poly.map(([px, py]) => [px + nx - el.x, py + ny - el.y]);
+    el.x = nx; el.y = ny;
+  }
+  if (drag.kind === "resize") {
+    const nw = clamp(p.x - el.x, 0.01, 1 - el.x), nh = clamp(p.y - el.y, 0.01, 1 - el.y);
+    if (el.poly && el.w > 0 && el.h > 0) el.poly = el.poly.map(([px, py]) => [el.x + (px - el.x) * nw / el.w, el.y + (py - el.y) * nh / el.h]);
+    el.w = nw; el.h = nh;
+  }
   renderElements();
 });
 $("stage").addEventListener("pointerup", () => {
   if (!drag) return;
   const d = drag; drag = null;
-  if (d.kind === "draw" && (d.el.w < 0.015 || d.el.h < 0.015)) {
+  if ((d.kind === "draw" && (d.el.w < 0.015 || d.el.h < 0.015)) || (d.kind === "free" && (d.el.poly.length < 4 || d.el.w < 0.015 || d.el.h < 0.015))) {
     state.elements = state.elements.filter((x) => x !== d.el); state.selEl = null; renderElements(); return;
   }
   if (d.kind !== "focus") state.cut = null;
+  // 중심점을 옮기면 사진 속 피사체 영역도 같은 크기로 그 위치로 이동
+  if (d.kind === "focus" && state.subject) {
+    const s = state.subject, hw = (s.x1 - s.x0) / 2, hh = (s.y1 - s.y0) / 2;
+    const cx = clamp(state.focus.x, hw, 1 - hw), cy = clamp(state.focus.y, hh, 1 - hh);
+    state.subject = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
+  }
   renderElements(); regenerate();
 });
 
@@ -957,7 +1012,12 @@ function autoDetect() {
   const photo = !!big && area(big) > N * 0.25 && edgeTouch(big) >= 2;
   let focus = null;
   // 사진 배경이면 사진 속 사물은 옮기지도 지우지도 않음
-  if (photo) { focus = { x: clamp(big.mx / W, 0.1, 0.9), y: clamp(big.my / H, 0.1, 0.9) }; objs = []; }
+  let subject = null;
+  if (photo) {
+    focus = { x: clamp(big.mx / W, 0.1, 0.9), y: clamp(big.my / H, 0.1, 0.9) };
+    subject = { x0: big.x0 / W, y0: big.y0 / H, x1: big.x1 / W, y1: big.y1 / H };
+    objs = [];
+  }
   // 모서리에 붙은 작은 덩어리(광원 번짐 등)는 배경의 일부
   else objs = objs.filter((b) => !(edgeTouch(b) >= 2 && area(b) < N * 0.15));
   for (const b of objs) {
@@ -1001,12 +1061,12 @@ function autoDetect() {
     w: clamp((b.x1 - b.x0 + 2 * pad) / W, 0, 1 - clamp((b.x0 - pad) / W, 0, 1)),
     h: clamp((b.y1 - b.y0 + 2 * pad) / H, 0, 1 - clamp((b.y0 - pad) / H, 0, 1)),
   }));
-  return { els, focus, photo };
+  return { els, focus, photo, subject };
 }
 function runAutoDetect(note) {
   if (!state.src) return;
-  const { els: list, focus, photo } = autoDetect();
-  state.elements = list; state.selEl = null; state.cut = null; state.photoBg = photo;
+  const { els: list, focus, photo, subject } = autoDetect();
+  state.elements = list; state.selEl = null; state.cut = null; state.photoBg = photo; state.subject = subject;
   if (focus) { state.focus = focus; placeFocus(); }
   const st = $("aiStatus"); st.hidden = false; st.className = "ai-status";
   st.textContent = (note || `자동 인식으로 ${list.length}개 요소를 찾았습니다. 어긋난 박스는 ‘직접 편집’으로 고치세요.`)
@@ -1050,6 +1110,8 @@ JSON만 답하세요. 형식: {"elements":[{"type":"text","label":"짧은 한국
     const hasSubject = out && out.subject && isFinite(+out.subject.x) && isFinite(+out.subject.y) && (+out.subject.x || +out.subject.y);
     if (hasSubject) { state.focus = { x: clamp(+out.subject.x / 1000, 0, 1), y: clamp(+out.subject.y / 1000, 0, 1) }; placeFocus(); }
     state.photoBg = !!hasSubject && !list.some((e) => e.type === "image" && e.w * e.h > 0.08);
+    // AI는 주인공 중심만 알려주므로 그 주변(가로 40%·세로 50%)을 피사체 영역으로
+    state.subject = state.photoBg ? { x0: clamp(state.focus.x - 0.2, 0, 1), y0: clamp(state.focus.y - 0.25, 0, 1), x1: clamp(state.focus.x + 0.2, 0, 1), y1: clamp(state.focus.y + 0.25, 0, 1) } : null;
     st.textContent = `${list.length}개 요소를 찾았습니다. 박스가 어긋나면 ‘직접 편집’으로 고치세요.`;
     renderElements(); regenerate();
   } catch (err) {
@@ -1240,9 +1302,20 @@ function splitRows(fg, bw, bh, ox, oy) {
   });
 }
 
+// 자유형 영역을 (x0,y0)부터 bw×bh 크기 칸에 칠해 안/밖 표시 배열로 (grow: 둘레를 그만큼 넓힘)
+function rasterPoly(poly, W, H, x0, y0, bw, bh, grow = 0) {
+  const c = document.createElement("canvas"); c.width = Math.max(1, bw); c.height = Math.max(1, bh);
+  const x = c.getContext("2d", { willReadFrequently: true });
+  x.beginPath(); poly.forEach(([px, py], i) => { const X = px * W - x0, Y = py * H - y0; i ? x.lineTo(X, Y) : x.moveTo(X, Y); }); x.closePath();
+  x.fillStyle = "#fff"; x.fill();
+  if (grow > 0) { x.lineWidth = grow * 2; x.lineJoin = "round"; x.strokeStyle = "#fff"; x.stroke(); }
+  const d = x.getImageData(0, 0, c.width, c.height).data, out = new Uint8Array(c.width * c.height);
+  for (let i = 0; i < out.length; i++) out[i] = d[i * 4 + 3] > 64 ? 1 : 0;
+  return out;
+}
 let prepCache = null;
 function getPrep() {
-  const key = state.srcUrl + "|" + state.elements.map((e) => [e.type, e.x.toFixed(4), e.y.toFixed(4), e.w.toFixed(4), e.h.toFixed(4)].join(",")).join(";");
+  const key = state.srcUrl + "|" + state.elements.map((e) => [e.type, e.x.toFixed(4), e.y.toFixed(4), e.w.toFixed(4), e.h.toFixed(4), e.poly ? e.poly.length : 0].join(",")).join(";");
   if (prepCache && prepCache.key === key) return prepCache;
   const img = state.src, iw = img.naturalWidth, ih = img.naturalHeight;
   const k = Math.min(1, 2000 / Math.max(iw, ih));
@@ -1259,6 +1332,12 @@ function getPrep() {
   const sd = sx.getImageData(0, 0, sw, sh);
   const mask = new Uint8Array(sw * sh), dil = Math.max(2, Math.round(Math.min(sw, sh) * 0.015));
   for (const e of state.elements) {
+    if (e.poly && e.poly.length > 2) {
+      // 자유형: 그 모양대로(조금 넓혀) 비움
+      const pm = rasterPoly(e.poly, sw, sh, 0, 0, sw, sh, dil);
+      for (let i = 0; i < pm.length; i++) if (pm[i]) mask[i] = 1;
+      continue;
+    }
     const x0 = Math.max(0, Math.floor(e.x * sw) - dil), y0 = Math.max(0, Math.floor(e.y * sh) - dil);
     const x1 = Math.min(sw, Math.ceil((e.x + e.w) * sw) + dil), y1 = Math.min(sh, Math.ceil((e.y + e.h) * sh) + dil);
     for (let y = y0; y < y1; y++) mask.fill(1, y * sw + x0, y * sw + x1);
@@ -1278,8 +1357,10 @@ function getPrep() {
     const x1 = Math.min(W, Math.ceil((e.x + e.w) * W)), y1 = Math.min(H, Math.ceil((e.y + e.h) * H));
     const bw = x1 - x0, bh = y1 - y0; if (bw < 2 || bh < 2) continue;
     const fg = new Uint8Array(bw * bh);
+    const inPoly = e.poly && e.poly.length > 2 ? rasterPoly(e.poly, W, H, x0, y0, bw, bh, 2) : null;
     let cr = 0, cg = 0, cb = 0, cn = 0;
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      if (inPoly && !inPoly[(y - y0) * bw + (x - x0)]) continue;   // 자유형 밖은 무시
       const i = y * W + x, r = wd[i * 4] - cd[i * 4], g = wd[i * 4 + 1] - cd[i * 4 + 1], b = wd[i * 4 + 2] - cd[i * 4 + 2];
       const dd = Math.sqrt(r * r + g * g + b * b), a = clamp((dd - 16) / 48, 0, 1);
       if (a > 0) { md.data[i * 4] = wd[i * 4]; md.data[i * 4 + 1] = wd[i * 4 + 1]; md.data[i * 4 + 2] = wd[i * 4 + 2]; md.data[i * 4 + 3] = Math.max(md.data[i * 4 + 3], Math.round(a * 255)); }
@@ -1312,7 +1393,9 @@ function buildSections(P) {
   const pad = U * 0.006;
   const boxOf = (e) => {
     const sx = Math.max(0, e.x * P.W - pad), sy = Math.max(0, e.y * P.H - pad);
-    return { sx, sy, sw: Math.min(P.W - sx, e.w * P.W + 2 * pad), sh: Math.min(P.H - sy, e.h * P.H + 2 * pad), elId: e.id };
+    const b = { sx, sy, sw: Math.min(P.W - sx, e.w * P.W + 2 * pad), sh: Math.min(P.H - sy, e.h * P.H + 2 * pad), elId: e.id };
+    if (e.poly && e.poly.length > 2) b.poly = e.poly.map(([px, py]) => [px * P.W, py * P.H]);
+    return b;
   };
   const secs = [];
   for (const e of els) {
@@ -1324,6 +1407,11 @@ function buildSections(P) {
       secs.push({ kind: "etext", type: "text", lines, size0: ink / 0.74, rowH: ink + 6,
         family: EDIT_FONTS[e.edit.font] || EDIT_FONTS.noto, weight: e.edit.weight || 900,
         color: e.edit.color || P.tcolor.get(e.id) || "#111111" });
+    } else if (e.type === "text" && e.poly && e.poly.length > 2) {
+      // 자유형 문구(기울어진 손글씨 등): 줄바꿈 없이 모양 그대로, 글자만 분리된 레이어에서 통째로 옮김
+      const rows = P.texts.get(e.id), box = { ...boxOf(e), src: "matte" };
+      delete box.poly;
+      secs.push({ kind: "single", type: "text", box, rowH: rows && rows.length ? Math.max(...rows.map((r) => r.y1 - r.y0)) : e.h * P.H * 0.4 });
     } else if (e.type === "text") {
       const rows = P.texts.get(e.id); if (!rows || !rows.length) continue;
       secs.push({ kind: "text", type: "text", rows, rowH: Math.max(...rows.map((r) => r.y1 - r.y0)) });
@@ -1451,7 +1539,7 @@ function smartLayout(p) {
     return { h, put(x, y, out) { let yy = y; ms.forEach((mm, i) => { if (i) yy += gaps[i - 1]; mm.put(x, yy, cw, align, out); yy += mm.h; }); } };
   };
   const fit = (ok) => { let lo = 0, hi = maxS; for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (ok(mid)) lo = mid; else hi = mid; } return lo; };
-  const fitStack = (secs, cw, align) => { const s = fit((t) => stack(secs, t, cw, align).h <= ah); return { s, st: stack(secs, s, cw, align) }; };
+  const fitStack = (secs, cw, align, lim = ah) => { const s = fit((t) => stack(secs, t, cw, align).h <= lim); return { s, st: stack(secs, s, cw, align) }; };
 
   // 공간이 부족하면 우선순위 낮은 묶음부터 생략 (헤드라인·버튼·큰 문구는 유지)
   const dropOrder = all.map((_, i) => i).sort((a, b) => all[b].prio - all[a].prio);
@@ -1473,6 +1561,42 @@ function smartLayout(p) {
     return a.score * Math.pow(0.7, a.k) > b.score * Math.pow(0.7, b.k);
   };
   const consider = (c) => { if (!best || better(c, best)) best = c; };
+
+  // 사진 배경: 사진 속 피사체 영역을 피해 문구를 놓음 (세로·정사각은 피사체 위쪽 + CTA 맨 아래, 가로는 피사체 옆)
+  if (state.photoBg && state.subject) {
+    const sub = state.subject, wide = W / H >= 1.3;
+    const tEls = state.elements.filter((e) => e.type === "text");
+    const textLeft = tEls.length ? tEls.reduce((s, e) => s + e.x + e.w / 2, 0) / tEls.length < 0.5 : state.focus.x >= 0.5;
+    const bg = wide ? { ax: textLeft ? "right" : "left", ay: 0.5 } : { ax: 0.5, ay: sub.y0 + sub.y1 > 1 ? "bottom" : "top" };
+    const crop = bgCrop(W, H, P, bg.ax, bg.ay), kx = W / crop.sw, ky = H / crop.sh;
+    const so = { x0: (sub.x0 * P.W - crop.sx) * kx, y0: (sub.y0 * P.H - crop.sy) * ky, x1: (sub.x1 * P.W - crop.sx) * kx, y1: (sub.y1 * P.H - crop.sy) * ky };
+    const gapS = Math.min(W, H) * 0.03;
+    let pbest = null;
+    const pconsider = (c) => { if (!pbest || better(c, pbest)) pbest = c; };
+    for (const { secs, k } of variants) {
+      const cta = [...secs].reverse().find((s) => s.type === "button");
+      const rest = cta ? secs.filter((s) => s !== cta) : secs;
+      if (wide) {
+        const avail = textLeft ? so.x0 - gapS - L0 : (W - R0) - (so.x1 + gapS);
+        const cw = clamp(avail, aw * 0.35, aw * 0.6);
+        const r = fitStack(secs, cw, "left");
+        pconsider({ score: r.s, hp: r.s * maxRow, k, name: "사진 옆 배치", bg,
+          place: () => { const out = []; r.st.put(textLeft ? L0 : W - R0 - cw, T0 + (ah - r.st.h) / 2, out); return out; } });
+      } else {
+        // CTA는 맨 아래(사진 아래쪽과 겹쳐도 됨), 나머지 문구는 피사체 위쪽 빈 공간에만
+        let ctaM = null, ctaH = 0;
+        if (cta) { const sC = fit((t) => measure(cta, t, aw * 0.92).h <= ah * 0.13); ctaM = measure(cta, sC, aw * 0.92); ctaH = ctaM.h + gapS; }
+        const subTop = sub.y0 + sub.y1 > 1 ? so.y0 : H;   // 피사체가 아래쪽이면 그 위가 빈 공간
+        const topH = Math.min(ah - ctaH, subTop - gapS - T0);
+        if (topH < ah * 0.2 || !rest.length) continue;
+        const r = fitStack(rest, aw, "center", topH);
+        pconsider({ score: r.s, hp: r.s * maxRow, k, name: "사진 위 배치", bg,
+          place: () => { const out = []; r.st.put(L0, T0 + Math.max(0, (topH - r.st.h) * 0.35), out); if (ctaM) ctaM.put(L0, T0 + ah - ctaM.h, aw, "center", out); return out; } });
+      }
+    }
+    if (pbest && pbest.hp >= need) return { name: pbest.name + (pbest.k ? ` · ${pbest.k}개 생략` : ""), items: pbest.place(), bg: pbest.bg };
+  }
+
   for (const { secs, k } of variants) {
     const pen = 1;
     {
@@ -1498,24 +1622,12 @@ function smartLayout(p) {
       } });
     }
   }
-  // 사진 배경 + 가로형: 문구는 피사체 반대쪽에 모으고, 배경은 피사체가 그 반대편에 오도록 맞춤
-  if (state.photoBg && W / H >= 1.3) {
-    // 원본에서 문구가 있던 쪽을 유지 (문구가 왼쪽이면 배경은 오른쪽 기준으로 잘라 피사체를 살림)
-    const tEls = state.elements.filter((e) => e.type === "text");
-    const textLeft = tEls.length ? tEls.reduce((s, e) => s + e.x + e.w / 2, 0) / tEls.length < 0.5 : state.focus.x >= 0.5;
-    const cw = aw * 0.56;
-    for (const { secs, k } of variants) {
-      const r = fitStack(secs, cw, "left");
-      consider({ score: r.s * 1.2, hp: r.s * maxRow, k, name: "사진 옆 배치", bgAnchor: textLeft ? "right" : "left",
-        place: () => { const out = []; r.st.put(textLeft ? L0 : W - R0 - cw, T0 + (ah - r.st.h) / 2, out); return out; } });
-    }
-  }
   // 원본 배치는 비율이 거의 같을 때(±10%)만 후보로
   if (!p.safe && Math.abs(Math.log((W / H) / (P.W / P.H))) < 0.1) {
     const s = Math.min(W / P.W, H / P.H);
     consider({ score: s * 1.08, hp: s * maxRow, k: 0, name: "원본 배치", place: () => [{ src: "work", sx: 0, sy: 0, sw: P.W, sh: P.H, dx: (W - P.W * s) / 2, dy: (H - P.H * s) / 2, dw: P.W * s, dh: P.H * s, region: true }] });
   }
-  return { name: best.name + (best.k ? ` · ${best.k}개 생략` : ""), items: best.place(), bgAnchor: best.bgAnchor || 0.5 };
+  return { name: best.name + (best.k ? ` · ${best.k}개 생략` : ""), items: best.place(), bg: best.bg || { ax: 0.5, ay: 0.5 } };
 }
 
 // 잘라낼 영역에 걸친 다른 요소(문구·버튼 등)는 복원된 배경으로 덮은 원본을 돌려줌 → 글자 조각이 따라오지 않음
@@ -1548,13 +1660,19 @@ function isolatedSource(P, it) {
 }
 
 // 복원된 배경을 새 비율로 늘림 (1.6배까지는 늘리고, 그 이상은 중심점 기준으로 잘라냄)
-function drawCleanBg(x, W, H, P, anchor = 0.5) {
+// ax/ay: 0~1이면 중심점을 출력의 그 위치에, "left"/"right"/"top"/"bottom"이면 원본 그쪽 끝에 맞춰 자름
+function bgCrop(W, H, P, ax = 0.5, ay = 0.5) {
   const A = P.W / P.H, T = W / H, k = clamp(T / A, 1 / 1.6, 1.6), need = T / k;
   let sw = P.W, sh = P.H;
   if (need > A) sh = P.W / need; else sw = P.H * need;
-  const sx = anchor === "right" ? P.W - sw : anchor === "left" ? 0 : clamp(state.focus.x * P.W - sw * anchor, 0, P.W - sw), sy = clamp(state.focus.y * P.H - sh / 2, 0, P.H - sh);
+  const sx = ax === "right" ? P.W - sw : ax === "left" ? 0 : clamp(state.focus.x * P.W - sw * ax, 0, P.W - sw);
+  const sy = ay === "bottom" ? P.H - sh : ay === "top" ? 0 : clamp(state.focus.y * P.H - sh * ay, 0, P.H - sh);
+  return { sx, sy, sw, sh };
+}
+function drawCleanBg(x, W, H, P, bg = {}) {
+  const c = bgCrop(W, H, P, bg.ax, bg.ay);
   x.imageSmoothingQuality = "high";
-  x.drawImage(P.clean, sx, sy, sw, sh, 0, 0, W, H);
+  x.drawImage(P.clean, c.sx, c.sy, c.sw, c.sh, 0, 0, W, H);
 }
 
 /* ---------- 렌더링 · 압축 ---------- */
@@ -1581,6 +1699,17 @@ function drawFeathered(ctx, src, it, feather) {
   const t = document.createElement("canvas"); t.width = dw; t.height = dh;
   const x = t.getContext("2d"); x.imageSmoothingQuality = "high";
   x.drawImage(stepDown(src, it.sx, it.sy, it.sw, it.sh, dw, dh), 0, 0, dw, dh);
+  if (it.poly) {
+    // 자유형: 그 모양대로 오려냄 (가장자리만 살짝 흐리게)
+    const m = document.createElement("canvas"); m.width = dw; m.height = dh;
+    const mx = m.getContext("2d");
+    if ("filter" in mx) mx.filter = `blur(${Math.max(1, Math.min(dw, dh) * 0.01)}px)`;
+    mx.beginPath(); it.poly.forEach(([px, py], i) => { const X = (px - it.sx) / it.sw * dw, Y = (py - it.sy) / it.sh * dh; i ? mx.lineTo(X, Y) : mx.moveTo(X, Y); });
+    mx.closePath(); mx.fillStyle = "#000"; mx.fill();
+    x.globalCompositeOperation = "destination-in"; x.drawImage(m, 0, 0);
+    ctx.drawImage(t, Math.round(it.dx), Math.round(it.dy));
+    return;
+  }
   const f = Math.min(feather, dw / 4, dh / 4);
   if (f >= 1) {
     x.globalCompositeOperation = "destination-in";
@@ -1621,7 +1750,7 @@ function render(p, mode) {
     const L = smartLayout(p);
     if (L) {
       const P = getPrep();
-      if (state.bgMode === "auto") drawCleanBg(x, p.w, p.h, P, L.bgAnchor); else paintBackground(x, p.w, p.h);
+      if (state.bgMode === "auto") drawCleanBg(x, p.w, p.h, P, L.bg); else paintBackground(x, p.w, p.h);
       for (const it of L.items) {
         if (it.src === "text") {
           x.font = `${it.weight} ${it.px}px ${it.family}, sans-serif`;

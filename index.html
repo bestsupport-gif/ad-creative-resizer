@@ -1659,13 +1659,32 @@ function smartLayout(p) {
   const maxRow = Math.max(1, ...all.filter((s) => s.type === "text").map((s) => s.rowH));
   const need = Math.max(14, 0.045 * Math.sqrt(W * H), W / H >= 3 ? 0.24 * H : 0);
   let best = null;
+  // 순위: ③최소 크기 도달(생략 적은 순) ②최소 크기의 60% 이상(헤드라인 큰 순) ①최후 수단(헤드라인 일부·CTA 생략)은 그마저 안 될 때만
+  const rank = (c) => (c.last ? (c.hp >= need ? 1 : 0) : c.hp >= need ? 3 : c.hp >= need * 0.6 ? 2 : 0);
   const better = (a, b) => {
-    const la = a.hp >= need, lb = b.hp >= need;
-    if (la !== lb) return la;
-    if (la && a.k !== b.k) return a.k < b.k;
-    return a.score * Math.pow(0.7, a.k) > b.score * Math.pow(0.7, b.k);
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra > rb;
+    if (ra === 3 && a.k !== b.k) return a.k < b.k;
+    if (ra === 3) return a.score > b.score;
+    return a.hp > b.hp;
   };
   const consider = (c) => { if (!best || better(c, best)) best = c; };
+  // 띠 배너용: 왼쪽(또는 오른쪽)에 문구를 쌓고 반대쪽에 CTA
+  const ctaSide = (secs, textLeft = true) => {
+    const cta = [...secs].reverse().find((s) => s.type === "button");
+    const rest = cta ? secs.filter((s) => s !== cta) : secs;
+    if (!cta || !rest.length) return null;
+    const g = Math.min(W, H) * 0.12, rwMax = aw * 0.42;
+    const sC = fit((t) => { const m = measure(cta, t, rwMax); return m.h <= ah * 0.62 && m.w <= rwMax; });
+    const cm = measure(cta, sC, rwMax), lw = aw - cm.w - g;
+    if (lw < aw * 0.4) return null;
+    const r = fitStack(rest, lw, "left");
+    return { r, place: () => {
+      const out = [], tw = Math.min(lw, r.st.w), total = tw + g + cm.w, x0 = L0 + (aw - total) / 2;
+      const tx = textLeft ? x0 : x0 + cm.w + g, cx = textLeft ? x0 + tw + g : x0;
+      r.st.put(tx, T0 + (ah - r.st.h) / 2, out, tw); cm.put(cx, T0 + (ah - cm.h) / 2, cm.w, "left", out); return out;
+    } };
+  };
 
   // 사진 배경: 사진 속 피사체 영역을 피해 문구를 놓음 (세로·정사각은 피사체 위쪽 + CTA 맨 아래, 가로는 피사체 옆)
   if (state.photoBg && state.subject) {
@@ -1678,13 +1697,16 @@ function smartLayout(p) {
     const gapS = Math.min(W, H) * 0.03;
     // 사진 배경은 문구 공간이 좁으므로, 헤드라인이 충분히 큰 크기(want)가 될 때까지 덜 중요한 문구부터 생략
     const want = Math.max(need, Math.min(W, H) * 0.09);
+    const keepSecs = new Set([...keep].map((i) => all[i]));
+    // 헤드라인이 문구 공간 폭을 얼마나 채우는지 (0~1)
+    const headFill = (secs, s, cw) => Math.max(0, ...secs.filter((x) => keepSecs.has(x)).map((x) => measure(x, s, cw).w)) / cw;
     let pbest = null;
-    // 우선순위: ①헤드라인·CTA 유지 + 목표 크기 도달(생략 적은 순) ②헤드라인·CTA 유지 + 최소 크기(헤드라인 큰 순) ③최후 수단
-    const tier = (c) => (c.last ? (c.hp >= need ? 1 : 0) : c.hp >= want ? 3 : c.hp >= need ? 2 : 0);
+    // 우선순위: ④헤드라인·CTA 유지 + 목표 크기 + 폭 70% 이상(생략 적은 순) ③목표 크기 ②최소 크기의 60% 이상 (③② 헤드라인 큰 순) ①최후 수단
+    const tier = (c) => (c.last ? (c.hp >= need ? 1 : 0) : c.hp >= want && c.hw >= 0.7 ? 4 : c.hp >= want ? 3 : c.hp >= need * 0.6 ? 2 : 0);
     const pbetter = (a, b) => {
       const ta = tier(a), tb = tier(b);
       if (ta !== tb) return ta > tb;
-      if (ta === 3 && a.k !== b.k) return a.k < b.k;
+      if (ta === 4 && a.k !== b.k) return a.k < b.k;
       return a.hp > b.hp;
     };
     const pconsider = (c) => { if (!pbest || pbetter(c, pbest)) pbest = c; };
@@ -1695,19 +1717,22 @@ function smartLayout(p) {
         // 띠 배너: 헤드라인·CTA를 한 줄로, 원래 문구가 있던 쪽부터
         const row = (s) => { const ms = secs.map((sec) => measure(sec, s, 1e9)), g = 0.05 * U * s; return { ms, g, w: ms.reduce((t, mm) => t + mm.w, 0) + g * (ms.length - 1), h: Math.max(...ms.map((mm) => mm.h)) }; };
         const s = fit((t) => { const r = row(t); return r.w <= aw && r.h <= ah; });
-        pconsider({ score: s, hp: s * maxRow, k, last, name: "사진 한 줄 배치", bg,
+        pconsider({ score: s, hp: s * maxRow, hw: 1, k, last, name: "사진 한 줄 배치", bg,
           place: () => {
             const r = row(s), out = []; let x = textLeft ? L0 : W - R0 - r.w;
             r.ms.forEach((mm) => { mm.put(x, T0 + (ah - mm.h) / 2, mm.w, "left", out); x += mm.w + r.g; });
             return out;
           } });
+        // 문구 쌓기 + 옆에 CTA
+        const cs = ctaSide(secs, textLeft);
+        if (cs) pconsider({ score: cs.r.s, hp: cs.r.s * maxRow, hw: 1, k, last, name: "사진 띠 배치", bg, place: cs.place });
         continue;
       }
       if (wide) {
         const avail = textLeft ? so.x0 - gapS - L0 : (W - R0) - (so.x1 + gapS);
         const cw = clamp(avail, aw * 0.35, aw * 0.6);
         const r = fitStack(secs, cw, "left");
-        pconsider({ score: r.s, hp: r.s * maxRow, k, last, name: "사진 옆 배치", bg,
+        pconsider({ score: r.s, hp: r.s * maxRow, hw: headFill(secs, r.s, cw), k, last, name: "사진 옆 배치", bg,
           place: () => { const out = []; r.st.put(textLeft ? L0 : W - R0 - cw, T0 + (ah - r.st.h) / 2, out); return out; } });
       } else {
         // CTA는 맨 아래(사진 아래쪽과 겹쳐도 됨), 나머지 문구는 피사체 위쪽 빈 공간에만
@@ -1717,18 +1742,22 @@ function smartLayout(p) {
         const topH = Math.min(ah - ctaH, subTop - gapS - T0);
         if (topH < ah * 0.2 || !rest.length) continue;
         const r = fitStack(rest, aw, "center", topH);
-        pconsider({ score: r.s, hp: r.s * maxRow, k, last, name: "사진 위 배치", bg,
+        pconsider({ score: r.s, hp: r.s * maxRow, hw: headFill(rest, r.s, aw), k, last, name: "사진 위 배치", bg,
           place: () => { const out = []; r.st.put(L0, T0 + Math.max(0, (topH - r.st.h) * 0.35), out); if (ctaM) ctaM.put(L0, T0 + ah - ctaM.h, aw, "center", out); return out; } });
       }
     }
     if (pbest && pbest.hp >= need) return { name: pbest.name + (pbest.k ? ` · ${pbest.k}개 생략` : ""), items: pbest.place(), bg: pbest.bg };
   }
 
-  for (const { secs, k } of variants) {
+  for (const { secs, k, last } of variants) {
     const pen = 1;
+    if (W / H >= 2.6) {
+      const cs = ctaSide(secs);
+      if (cs) consider({ score: cs.r.s, hp: cs.r.s * maxRow, k, last, name: "띠 배치", place: cs.place });
+    }
     {
       const r = fitStack(secs, aw, "center");
-      consider({ score: r.s * pen, hp: r.s * maxRow, k, name: "세로 배치", place: () => { const out = []; r.st.put(L0, T0 + (ah - r.st.h) / 2, out); return out; } });
+      consider({ score: r.s * pen, hp: r.s * maxRow, k, last, name: "세로 배치", place: () => { const out = []; r.st.put(L0, T0 + (ah - r.st.h) / 2, out); return out; } });
     }
     if (W / H >= 1.25) {
       const left = secs.filter((s) => !s.visual), right = secs.filter((s) => s.visual);
@@ -1736,7 +1765,7 @@ function smartLayout(p) {
         const gap = Math.min(W, H) * 0.07, lw = (aw - gap) * f, rw = aw - gap - lw;
         const L = fitStack(left, lw, "left"), R = fitStack(right, rw, "center");
         const ratio = L.s / R.s, sc = Math.sqrt(L.s * R.s) * (ratio < 0.6 || ratio > 2 ? 0.8 : 1);
-        consider({ score: sc * pen, hp: L.s * maxRow, k, name: "좌우 배치", place: () => {
+        consider({ score: sc * pen, hp: L.s * maxRow, k, last, name: "좌우 배치", place: () => {
           // 실제 내용 폭 기준으로 두 열을 붙여 가운데 정렬 (한쪽으로 쏠리지 않게)
           const out = [], lw2 = Math.min(lw, L.st.w), rw2 = Math.min(rw, R.st.w), x0 = L0 + (aw - (lw2 + gap + rw2)) / 2;
           L.st.put(x0, T0 + (ah - L.st.h) / 2, out, lw2); R.st.put(x0 + lw2 + gap, T0 + (ah - R.st.h) / 2, out, rw2); return out;
@@ -1746,7 +1775,7 @@ function smartLayout(p) {
     if (W / H >= 3 && secs.length > 1) {
       const row = (s) => { const ms = secs.map((sec) => measure(sec, s, 1e9)), g = 0.05 * U * s; return { ms, g, w: ms.reduce((t, mm) => t + mm.w, 0) + g * (ms.length - 1), h: Math.max(...ms.map((mm) => mm.h)) }; };
       const s = fit((t) => { const r = row(t); return r.w <= aw && r.h <= ah; });
-      consider({ score: s * pen * 0.97, hp: s * maxRow, k, name: "한 줄 배치", place: () => {
+      consider({ score: s * pen * 0.97, hp: s * maxRow, k, last, name: "한 줄 배치", place: () => {
         const r = row(s), out = []; let x = L0 + (aw - r.w) / 2;
         r.ms.forEach((mm) => { mm.put(x, T0 + (ah - mm.h) / 2, mm.w, "left", out); x += mm.w + r.g; });
         return out;
